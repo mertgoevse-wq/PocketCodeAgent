@@ -106,3 +106,23 @@
 
 - **Quick Copy Shortcuts & Intents (`TerminalScreen.kt`)**:
   - Added clipboard copy shortcuts next to each recommended and executed history log. Added intent launchers to open Termux automatically when commands are approved.
+
+---
+
+### Expansion: Premium Calm Dark Theme & Onboarding Experience
+
+- **Onboarding Guide (`WelcomeScreen.kt`)**:
+  - Re-implemented the onboarding experience using descriptive German copy details (root-less operation, local keystore encryption, SAF folders, agent workflows, and Termux Bridge previews).
+  - Added a prominent secondary CTA: "Demo-Modus starten (Ohne Key)".
+
+- **8-Tile Navigation Grid (`ProjectDashboardScreen.kt`)**:
+  - Upgraded the central control hub to display all 8 primary operation panels: Agent starten, Dateien ansehen, Preview öffnen, Terminal öffnen, Provider einrichten, Workspace öffnen, Einstellungen und Logs öffnen.
+
+- **Premium Quiet Dark Theme (`Color.kt`)**:
+  - Replaced the high-contrast neon/cyberpunk shades with a calm dark system consisting of DeepSlateBackground, DarkSurface, SlateBlue accents, CalmSage green notifications, and WarmCopper warnings.
+
+- **In-Memory Simulated Filesystem (`DocumentFileWorkspace.kt` & `WorkspaceRepository.kt`)**:
+  - Embedded an in-memory virtual workspace directory (`demo://workspace`) pre-populated with simulated project files (`index.html`, `script.js`, `styles.css`, `package.json`) to allow fully interactive editor, diff-patching, and live-preview actions under Demo Mode.
+
+- **Demo Agent Completions (`AgentRepository.kt` & `MainActivity.kt`)**:
+  - Hooked simulated planner checklists, code patch modifications, and command execution suggestions under provider ID `999` to give users a working coding workflow immediately upon start.
