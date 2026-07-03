@@ -31,6 +31,7 @@ import com.pocketcodeagent.domain.agent.AgentMode
 import com.pocketcodeagent.domain.agent.CommandRiskLevel
 import com.pocketcodeagent.domain.agent.registry.AgentRegistry
 import com.pocketcodeagent.domain.agent.registry.RichAgentRole
+import com.pocketcodeagent.domain.skill.SkillRegistry
 import com.pocketcodeagent.ui.theme.*
 import com.pocketcodeagent.ui.viewmodel.AgentViewModel
 
@@ -110,6 +111,8 @@ fun ChatPanel(
             currentMode = viewModel.agentMode,
             onModeSelected = { viewModel.agentMode = it }
         )
+
+        SkillSelectorRow(viewModel = viewModel)
 
         AgentActionRow(
             provider = provider,
@@ -200,6 +203,103 @@ private fun StreamingBubble(roleName: String, text: String) {
                 color = TextPrimary,
                 fontSize = 13.sp,
                 lineHeight = 19.sp
+            )
+        }
+    }
+}
+
+// ─── Skill Selector ──────────────────────────────────────────────────────────
+@Composable
+private fun SkillSelectorRow(viewModel: AgentViewModel) {
+    var expanded by remember { mutableStateOf(false) }
+    val selected = viewModel.selectedSkill
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(InputBg)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("Skill:", color = TextSecondary, fontSize = 10.sp)
+
+        Box {
+            Surface(
+                color = if (selected != null) Color(0xFF26324A) else ChipBg,
+                shape = RoundedCornerShape(5.dp),
+                onClick = { expanded = true }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        selected?.displayName ?: "None",
+                        color = if (selected != null) SlateBlue else TextSecondary,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
+                    )
+                    Spacer(Modifier.width(3.dp))
+                    Icon(
+                        Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = TextSecondary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                containerColor = Color(0xFF1E1E26),
+                modifier = Modifier.heightIn(max = 340.dp)
+            ) {
+                DropdownMenuItem(
+                    text = { Text("None (no skill)", color = TextSecondary, fontSize = 11.sp) },
+                    onClick = {
+                        viewModel.selectedSkill = null
+                        expanded = false
+                    }
+                )
+                HorizontalDivider(color = Color(0xFF2A2A34), thickness = 0.5.dp)
+                SkillRegistry.ALL.forEach { skill ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(skill.displayName, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "${skill.category.displayName} · ${skill.mode.name}",
+                                    color = TextSecondary,
+                                    fontSize = 9.sp
+                                )
+                            }
+                        },
+                        onClick = {
+                            viewModel.applySkill(skill)
+                            expanded = false
+                        },
+                        leadingIcon = {
+                            Icon(
+                                if (skill.id == selected?.id) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+                                contentDescription = null,
+                                tint = if (skill.id == selected?.id) SlateBlue else TextSecondary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    )
+                }
+            }
+        }
+
+        if (selected != null) {
+            Spacer(Modifier.width(4.dp))
+            Text(
+                "→ ${viewModel.selectedRegistryRole.displayName}",
+                color = Color(0xFF505058),
+                fontSize = 9.sp,
+                maxLines = 1
             )
         }
     }

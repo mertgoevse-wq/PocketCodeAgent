@@ -20,6 +20,8 @@ import com.pocketcodeagent.domain.terminal.CommandStatus
 import com.pocketcodeagent.domain.terminal.TerminalCommand
 import com.pocketcodeagent.domain.agent.registry.AgentRegistry
 import com.pocketcodeagent.domain.agent.registry.RichAgentRole
+import com.pocketcodeagent.domain.skill.Skill
+import com.pocketcodeagent.domain.skill.SkillPromptBuilder
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -43,6 +45,9 @@ class AgentViewModel(
     // Registry role selection
     var selectedRegistryRole by mutableStateOf<RichAgentRole>(AgentRegistry.PLANNER)
 
+    // Skill selection
+    var selectedSkill by mutableStateOf<Skill?>(null)
+
     // Active agent coroutine job for cancellation (Stop Button)
     private var agentJob: Job? = null
 
@@ -58,11 +63,38 @@ class AgentViewModel(
     fun sendMessage(provider: Provider, rootUriString: String?, userText: String) {
         if (userText.trim().isEmpty()) return
 
-        val userMsg = ChatMessage(sender = "User", message = userText, isAgent = false)
+        val skill = selectedSkill
+        val finalMessage = if (skill != null) {
+            SkillPromptBuilder.build(
+                skill = skill,
+                userTask = userText,
+                workspaceSummary = rootUriString ?: "No workspace",
+                openFile = null,
+                role = selectedRegistryRole,
+                agentMode = agentMode
+            )
+        } else {
+            userText
+        }
+
+        val userMsg = ChatMessage(sender = "User", message = finalMessage, isAgent = false)
         chatMessages.add(userMsg)
         userInput = ""
 
         runAgentRole(provider, selectedRegistryRole, rootUriString)
+    }
+
+    /** Applies a skill: sets recommended role and mode, clears selection on re-tap. */
+    fun applySkill(skill: Skill) {
+        if (selectedSkill?.id == skill.id) {
+            selectedSkill = null
+            return
+        }
+        selectedSkill = skill
+        AgentRegistry.findById(skill.recommendedRoleId)?.let { role ->
+            selectedRegistryRole = role
+        }
+        agentMode = skill.mode
     }
 
     fun stopAgent() {
