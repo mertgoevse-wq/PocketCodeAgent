@@ -1,0 +1,32 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+Thumbs.db
+
+# App module specific
+/app/build
+/app/local.properties
+
+# Log files
+*.log
+
+# Keystore files
+*.jks
+*.keystore
+
+# Android Studio temporary files
+*.apk
+*.ap_
+*.dex
