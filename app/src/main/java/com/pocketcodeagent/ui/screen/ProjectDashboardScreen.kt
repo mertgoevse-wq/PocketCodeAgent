@@ -3,9 +3,9 @@ package com.pocketcodeagent.ui.screen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -33,6 +33,8 @@ fun ProjectDashboardScreen(
     modelName: String?,
     onNavigate: (String) -> Unit
 ) {
+    val scrollState = rememberScrollState()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -46,199 +48,222 @@ fun ProjectDashboardScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
+                .verticalScroll(scrollState)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Workspace & AI Info Banner
-            Card(
-                colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp)
+            // 1. Card: Active Provider Info
+            DashboardCard(
+                title = "Aktivierter AI-Provider 🔑",
+                icon = Icons.Default.Lock,
+                iconColor = WarmCopper
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(imageVector = Icons.Default.Folder, contentDescription = null, tint = SlateBlue)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = workspaceName ?: "Kein Workspace ausgewählt ⚠️",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = TextPrimary
-                        )
+                Column {
+                    if (providerName != null) {
+                        Text("Anbieter: $providerName", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text("Modell: $modelName", color = TextSecondary, fontSize = 12.sp)
+                    } else {
+                        Text("Kein API-Provider konfiguriert", color = TextSecondary, fontSize = 14.sp)
+                        Text("Läuft im simulierten Demo-Modus", color = CalmSage, fontSize = 12.sp)
                     }
-
                     Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(imageVector = Icons.Default.SettingsSuggest, contentDescription = null, tint = CalmSage)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (providerName != null) "Provider: $providerName ($modelName)" else "Kein API-Provider aktiv ⚠️ (Demo-Modus)",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary
-                        )
+                    Button(
+                        onClick = { onNavigate("providers") },
+                        colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text("Verwalten", color = Color.White, fontSize = 11.sp)
                     }
                 }
             }
 
+            // 2. Card: Current Workspace Info
+            DashboardCard(
+                title = "Projekt-Workspace 📂",
+                icon = Icons.Default.Folder,
+                iconColor = SlateBlue
+            ) {
+                Column {
+                    Text(
+                        text = workspaceName ?: "Kein Workspace ausgewählt",
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (workspaceName?.contains("Demo") == true) "demo://workspace (Virtueller Speicher)" else "Android Storage Access Framework (SAF)",
+                        color = TextSecondary,
+                        fontSize = 12.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { onNavigate("workspace") }) {
+                            Text("Ändern", color = SlateBlue, fontSize = 12.sp)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = { onNavigate("explorer") },
+                            colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text("Dateien öffnen", color = Color.White, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+
+            // 3. Card: Last Agent Run Status
+            DashboardCard(
+                title = "Letzter Agenten-Lauf 🤖",
+                icon = Icons.Default.SmartToy,
+                iconColor = CalmSage
+            ) {
+                Column {
+                    Text("Status: Bereit für Eingabe", color = CalmSage, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text("Ausgewählte Rolle: Planner / Coder / Reviewer", color = TextSecondary, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { onNavigate("chat") },
+                        colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text("Chat öffnen", color = Color.White, fontSize = 11.sp)
+                    }
+                }
+            }
+
+            // 4. Card: Build/Preview Status
+            DashboardCard(
+                title = "Build & LivePreview Status 👁️",
+                icon = Icons.Default.Web,
+                iconColor = SlateBlue
+            ) {
+                Column {
+                    val isDemo = workspaceName?.contains("Demo") == true
+                    Text(
+                        text = if (isDemo) "Projektstruktur: Vite (Demo) erkannt" else "Projektstruktur: Statisches HTML",
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (isDemo) "Vorschau-Server: http://127.0.0.1:5173" else "Dateibasiertes WebView-Rendering aktiv",
+                        color = TextSecondary,
+                        fontSize = 12.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { onNavigate("preview") },
+                        colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text("Vorschau laden", color = Color.White, fontSize = 11.sp)
+                    }
+                }
+            }
+
+            // 5. Grid Header & Quick Navigation Actions
             Text(
-                text = "Zentrale Steuerungsmodule:",
+                text = "Zentrale Schnellaktionen:",
                 style = MaterialTheme.typography.titleSmall,
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 12.dp)
+                modifier = Modifier.padding(top = 8.dp)
             )
 
-            // Navigation Grid (8 tiles)
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                item {
-                    DashboardTile(
-                        icon = Icons.Default.Chat,
-                        title = "Agent starten",
-                        subtitle = "Planen, coden & fixen",
-                        tint = SlateBlue,
-                        onClick = { onNavigate("chat") }
-                    )
+                QuickActionButton(
+                    icon = Icons.Default.Terminal,
+                    title = "Terminal",
+                    modifier = Modifier.weight(1f)
+                ) {
+                    onNavigate("terminal")
                 }
-
-                item {
-                    DashboardTile(
-                        icon = Icons.Default.FolderOpen,
-                        title = "Dateien ansehen",
-                        subtitle = "Projekt-Dateibaum",
-                        tint = CalmSage,
-                        onClick = { onNavigate("explorer") }
-                    )
+                QuickActionButton(
+                    icon = Icons.Default.ListAlt,
+                    title = "System-Logs",
+                    modifier = Modifier.weight(1f)
+                ) {
+                    onNavigate("logs")
                 }
-
-                item {
-                    DashboardTile(
-                        icon = Icons.Default.Web,
-                        title = "Preview öffnen",
-                        subtitle = "HTML/Vite-Vorschau",
-                        tint = SlateBlue,
-                        onClick = { onNavigate("preview") }
-                    )
+                QuickActionButton(
+                    icon = Icons.Default.Settings,
+                    title = "Settings",
+                    modifier = Modifier.weight(1f)
+                ) {
+                    onNavigate("settings")
                 }
-
-                item {
-                    DashboardTile(
-                        icon = Icons.Default.Terminal,
-                        title = "Terminal öffnen",
-                        subtitle = "Termux-Befehle",
-                        tint = CalmSage,
-                        onClick = { onNavigate("terminal") }
-                    )
-                }
-
-                item {
-                    DashboardTile(
-                        icon = Icons.Default.Lock,
-                        title = "Provider einrichten",
-                        subtitle = "API-Key & Endpoints",
-                        tint = WarmCopper,
-                        onClick = { onNavigate("providers") }
-                    )
-                }
-
-                item {
-                    DashboardTile(
-                        icon = Icons.Default.CreateNewFolder,
-                        title = "Workspace öffnen",
-                        subtitle = "Ordner per SAF picken",
-                        tint = SlateBlue,
-                        onClick = { onNavigate("workspace") }
-                    )
-                }
-
-                item {
-                    DashboardTile(
-                        icon = Icons.Default.Settings,
-                        title = "Einstellungen",
-                        subtitle = "App-Daten zurücksetzen",
-                        tint = TextSecondary,
-                        onClick = { onNavigate("settings") }
-                    )
-                }
-
-                item {
-                    DashboardTile(
-                        icon = Icons.Default.ListAlt,
-                        title = "Logs öffnen",
-                        subtitle = "Laufzeit-Protokolle",
-                        tint = CalmSage,
-                        onClick = { onNavigate("logs") }
-                    )
-                }
-            }
-            
-            // Bottom quick action for quick agent launching
-            Button(
-                onClick = { onNavigate("chat") },
-                colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .padding(top = 8.dp),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Icon(imageVector = Icons.Default.SmartToy, contentDescription = null, tint = Color.White)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("AI Agenten-Chat starten 🤖", color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
 
 @Composable
-fun DashboardTile(
+fun DashboardCard(
+    title: String,
+    icon: ImageVector,
+    iconColor: Color,
+    content: @Composable () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 12.dp)
+            ) {
+                Icon(imageVector = icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = title, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+fun QuickActionButton(
     icon: ImageVector,
     title: String,
-    subtitle: String,
-    tint: Color,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = DarkSurface),
         shape = RoundedCornerShape(8.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(115.dp)
+        modifier = modifier
+            .height(72.dp)
             .clickable { onClick() }
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier.size(28.dp)
-            )
-            Column {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    ),
-                    color = TextPrimary
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
-                    fontSize = 10.sp
-                )
-            }
+            Icon(imageVector = icon, contentDescription = null, tint = SlateBlue, modifier = Modifier.size(24.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = title, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }

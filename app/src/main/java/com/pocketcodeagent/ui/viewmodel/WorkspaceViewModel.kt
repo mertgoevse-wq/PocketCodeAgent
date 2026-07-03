@@ -193,4 +193,13 @@ class WorkspaceViewModel(val repository: WorkspaceRepository) : ViewModel() {
             }
         }
     }
+
+    fun deleteFile(fileUriString: String, onComplete: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val success = withContext(Dispatchers.IO) {
+                repository.deleteFile(fileUriString)
+            }
+            onComplete(success)
+        }
+    }
 }
