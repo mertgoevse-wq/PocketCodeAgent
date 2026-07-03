@@ -192,3 +192,41 @@
   - Created a test plan for the Galaxy A56 device validating onboarding, dashboard navigation, tree explorer, monospace editor, WebView and Agent workflows.
 - **Release Strategy Guide (`RELEASE_NEXT_STEPS.md`)**:
   - Published signing build setup instructions and Google Play Console submission workflows.
+
+---
+
+### Expansion: Workspace Preview + Static HTML Bundler + Local Server Preview
+
+- **PreviewTarget Model (`PreviewTarget.kt`)**:
+  - Sealed class hierarchy: `None`, `WorkspaceStatic`, `File(path, fileName)`, `Url(url)`.
+  - Replaced the old `String?`-based preview target with typed state in `MainViewModel`.
+
+- **Static HTML Bundler (`StaticPreviewBundler.kt`)**:
+  - Finds `index.html` in workspace (prefers root, then `public/`, then `src/`).
+  - Parses `<link rel="stylesheet">` and `<script src="...">` tags (both attribute orders).
+  - Reads CSS/JS files via SAF `DocumentFileWorkspace` and inlines them (`<style>`, `<script>`).
+  - Security: Blocks `../`, absolute paths, `content:`, `file://` references.
+  - External URLs (`http://`, `https://`) left untouched — warnings collected.
+  - Returns `StaticPreviewResult` with bundled HTML, source path, warnings, and loaded file lists.
+
+- **PreviewPanel Rewrite (`PreviewPanel.kt`)**:
+  - Segmented control: Workspace | File | URL modes.
+  - Workspace mode: "Load Workspace Preview" button → finds + bundles index.html → WebView.
+  - File mode: Preview current HTML file from workspace.
+  - URL mode: URL input + Load/Reload/Clear Cache buttons.
+  - Status bar: Target path, last reload time, warning count.
+  - Collapsible bottom panels: Console (max 200 logs), Warnings, Termux Help.
+  - Termux Help: 5 copyable commands (`pkg update`, `pkg install nodejs git`, `cd`, `npm install`, `npm run dev`).
+  - Error handling: server unreachable, SSL errors, timeout, missing workspace, missing index.html, unreadable files — all with specific messages.
+  - Auto-reload on file writes via `lastFileWriteTimestamp` (throttled, no reload on every state change).
+
+- **MainViewModel Updates (`MainViewModel.kt`)**:
+  - `activePreviewTarget: PreviewTarget` replaces old `String?`.
+  - New methods: `loadWorkspacePreview()`, `setPreviewUrl()`, `loadPreviewFile()`, `clearPreviewTarget()`.
+
+- **Subagent Roles System (`AGENTS.md`)**:
+  - Integrated 19 modular subagent roles from VoltAgent, Piebald-AI, and OpenHands repositories.
+  - Added Coordinator/Worker architecture patterns, subagent delegation best practices.
+  - Communication & code style guidelines, verification & testing standards.
+
+- **Build**: `BUILD SUCCESSFUL in 14s`. Keine Fehler, nur bestehende Deprecation-Warnungen.
