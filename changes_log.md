@@ -126,3 +126,19 @@
 
 - **Demo Agent Completions (`AgentRepository.kt` & `MainActivity.kt`)**:
   - Hooked simulated planner checklists, code patch modifications, and command execution suggestions under provider ID `999` to give users a working coding workflow immediately upon start.
+
+---
+
+### Expansion: Dynamic Provider Presets & Client Upgrades
+
+- **ProviderConfig Specification (`Provider.kt`)**:
+  - Exposed read-only getters implementing the `ProviderConfig` properties (displayName, apiKeyAlias, selectedModel, extraHeaders, supportsStreaming, enabled).
+  - Mapped a type alias linking `ProviderConfig` to the unified model `Provider`.
+
+- **Updated Presets & Default Selection (`ProviderSetupScreen.kt`)**:
+  - Updated templates to match OpenAI-compatible base URLs for OpenRouter, Gemini, NVIDIA NIM, Groq, Mistral AI, Together and Custom OpenAI.
+  - Added an explicit "Als Standard setzen" text action button to let users select active presets.
+
+- **HTTP Status Error Handler (`ApiClient.kt`)**:
+  - Overrode network callback handlers to maps client errors into clear German status alerts (401 Unauthorized, 403 Forbidden, 404 Not Found, 429 Too Many Requests, 500 Internal Error, and SocketTimeoutException).
+  - Added default settings for temperature (0.7) and max_tokens (2048) in streaming payloads.
