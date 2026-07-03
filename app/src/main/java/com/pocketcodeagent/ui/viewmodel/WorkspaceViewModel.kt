@@ -127,6 +127,32 @@ class WorkspaceViewModel(val repository: WorkspaceRepository) : ViewModel() {
         }
     }
 
+    fun applyAllPatches(rootUriString: String, patches: List<FilePatch>, onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            workspaceError = null
+            repository.workspace.setRootUri(rootUriString)
+            
+            val success = withContext(Dispatchers.IO) {
+                var allOk = true
+                for (patch in patches) {
+                    val result = com.pocketcodeagent.data.util.PatchApplier.applyPatch(repository.workspace, patch)
+                    if (result is com.pocketcodeagent.data.util.PatchApplier.PatchResult.Success) {
+                        appliedPatchesHistory.add(patch)
+                    } else if (result is com.pocketcodeagent.data.util.PatchApplier.PatchResult.Error) {
+                        workspaceError = result.message
+                        allOk = false
+                        break
+                    }
+                }
+                allOk
+            }
+            if (success) {
+                lastFileWriteTimestamp = System.currentTimeMillis()
+            }
+            onComplete(success)
+        }
+    }
+
     fun undoLastPatch(rootUriString: String, onComplete: (Boolean) -> Unit) {
         viewModelScope.launch {
             if (appliedPatchesHistory.isEmpty()) {

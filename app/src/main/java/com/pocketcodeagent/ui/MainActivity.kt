@@ -147,6 +147,10 @@ class MainActivity : ComponentActivity() {
                                 mainViewModel.navigateTo("chat")
                             }
                         },
+                        onApplyAll = {
+                            mainViewModel.pendingFileChanges = emptyList()
+                            mainViewModel.navigateTo("chat")
+                        },
                         onBackClick = { mainViewModel.navigateTo("chat") }
                     )
 

@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,6 +37,7 @@ fun DiffReviewScreen(
     rootWorkspaceUriString: String?,
     onApplyChange: (FilePatch) -> Unit,
     onRejectChange: () -> Unit,
+    onApplyAll: () -> Unit,
     onBackClick: () -> Unit
 ) {
     val activeChange = proposedPatches.getOrNull(currentIndex)
@@ -67,6 +69,21 @@ fun DiffReviewScreen(
                         Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
                     }
                 },
+                actions = {
+                    if (proposedPatches.isNotEmpty()) {
+                        IconButton(onClick = {
+                            if (rootWorkspaceUriString != null) {
+                                viewModel.applyAllPatches(rootWorkspaceUriString, proposedPatches) { success ->
+                                    if (success) {
+                                        onApplyAll()
+                                    }
+                                }
+                            }
+                        }) {
+                            Icon(imageVector = Icons.Default.DoneAll, contentDescription = "Apply All", tint = ElectricTeal)
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF0F0C1B))
             )
         },
@@ -84,7 +101,7 @@ fun DiffReviewScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = "⚠️ Error: $error",
+                                text = "⚠️ Fehler: $error",
                                 color = Color(0xFFFF8888),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -149,7 +166,7 @@ fun DiffReviewScreen(
                 ) {
                     Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = ElectricTeal, modifier = Modifier.size(64.dp))
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("All proposed changes have been reviewed!", color = Color.White, fontSize = 16.sp)
+                    Text("Alle vorgeschlagenen Änderungen geprüft!", color = Color.White, fontSize = 16.sp)
                 }
             } else {
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -162,7 +179,7 @@ fun DiffReviewScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "Action: ${activeChange.action.uppercase()}",
+                                text = "Aktion: ${activeChange.action.uppercase()}",
                                 color = when (activeChange.action.lowercase()) {
                                     "create" -> Color(0xFF88FF88)
                                     "delete" -> Color(0xFFFF8888)
@@ -178,73 +195,57 @@ fun DiffReviewScreen(
                             .weight(1f)
                             .fillMaxWidth()
                             .background(Color(0xFF07050E))
+                            .padding(8.dp)
                     ) {
-                        items(viewModel.activeDiffLines) { diffLine ->
-                            DiffLineItem(diffLine)
+                        items(viewModel.activeDiffLines) { line ->
+                            val backgroundColor = when (line.type) {
+                                DiffLineType.ADDED -> Color(0xFF0E2C1A)
+                                DiffLineType.REMOVED -> Color(0xFF381414)
+                                DiffLineType.UNCHANGED -> Color.Transparent
+                            }
+                            val textColor = when (line.type) {
+                                DiffLineType.ADDED -> Color(0xFF88FF88)
+                                DiffLineType.REMOVED -> Color(0xFFFF8888)
+                                DiffLineType.UNCHANGED -> Color.LightGray
+                            }
+                            val prefix = when (line.type) {
+                                DiffLineType.ADDED -> "+"
+                                DiffLineType.REMOVED -> "-"
+                                DiffLineType.UNCHANGED -> " "
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(backgroundColor)
+                                    .padding(horizontal = 8.dp, vertical = 1.dp)
+                            ) {
+                                Text(
+                                    text = String.format("%3d", line.lineNumber),
+                                    color = Color.DarkGray,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.width(30.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = prefix,
+                                    color = textColor,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.width(12.dp)
+                                )
+                                Text(
+                                    text = line.text,
+                                    color = textColor,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp
+                                )
+                            }
                         }
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-fun DiffLineItem(diffLine: DiffLine) {
-    val backgroundColor = when (diffLine.type) {
-        DiffLineType.ADDED -> Color(0xFF1E3A24) // Soft Green
-        DiffLineType.REMOVED -> Color(0xFF4A1A1E) // Soft Red
-        DiffLineType.UNCHANGED -> Color.Transparent
-    }
-
-    val textColor = when (diffLine.type) {
-        DiffLineType.ADDED -> Color(0xFF88FF88)
-        DiffLineType.REMOVED -> Color(0xFFFF8888)
-        DiffLineType.UNCHANGED -> Color(0xFFC5C0DB)
-    }
-
-    val prefix = when (diffLine.type) {
-        DiffLineType.ADDED -> "+"
-        DiffLineType.REMOVED -> "-"
-        DiffLineType.UNCHANGED -> " "
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(backgroundColor)
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Line number
-        Text(
-            text = diffLine.lineNumber.toString().padStart(3, ' '),
-            color = Color.DarkGray,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 11.sp,
-            modifier = Modifier.width(28.dp)
-        )
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        // Prefix (+ / - / ' ')
-        Text(
-            text = prefix,
-            color = textColor,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(12.dp)
-        )
-
-        Spacer(modifier = Modifier.width(4.dp))
-
-        // Content
-        Text(
-            text = diffLine.text,
-            color = textColor,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 13.sp
-        )
     }
 }
