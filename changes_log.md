@@ -165,3 +165,21 @@
   - Published a comprehensive build and installation manual mapping PowerShell build commands (`.\gradlew.bat assembleDebug`), output paths, MTP/ADB transfers, unknown source permission configurations, and Java version conflict resolutions.
 - **Manifest & Res Audit (`AndroidManifest.xml` & `strings.xml`)**:
   - Inspected and locked system permissions (INTERNET, ACCESS_NETWORK_STATE, POST_NOTIFICATIONS) and application metadata to assure a completely crash-free runtime environment.
+
+---
+
+### Expansion: Mobile IDE Layout & Premium UI Optimizations
+
+- **Bottom Navigation Hub (`MainActivity.kt`)**:
+  - Integrated a persistent `NavigationBar` Bottom Navigation bar.
+- **Detailed Status Cards (`ProjectDashboardScreen.kt`)**:
+  - Replaced the simple grid with 4 informative dashboard cards (Active Provider, Current Workspace, Last Agent Run, and LivePreview status) and a row of Quick Action buttons.
+- **5-Button Agent Action Suite (`ChatAgentScreen.kt`)**:
+  - Added five action bar buttons: Plan, Code, Review, Fix, and Apply.
+  - Formatted chat bubbles with quiet slate-blue and sage-green coloring.
+- **Tree Search & Delete Confirmations (`FileExplorerScreen.kt`)**:
+  - Added a search filter bar, extension-specific file icons, and file deletions with confirmation dialogs.
+- **Monospace Code Gutter (`CodeEditorScreen.kt`)**:
+  - Added a toggleable line numbering gutter, copy-all utility, and undo stack.
+- **File System Delete Bridge (`WorkspaceViewModel.kt`)**:
+  - Added `deleteFile` wrapper mapping repository deletes.
