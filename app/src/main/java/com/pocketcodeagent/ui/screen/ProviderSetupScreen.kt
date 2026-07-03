@@ -37,11 +37,11 @@ data class ProviderTemplate(
 
 val providerTemplates = listOf(
     ProviderTemplate("OpenRouter", "https://openrouter.ai/api/v1", "google/gemini-2.5-flash"),
-    ProviderTemplate("Google AI Studio (Gemini)", "https://generativelanguage.googleapis.com/v1beta/openai/", "gemini-2.5-flash"),
+    ProviderTemplate("Gemini OpenAI-compatible", "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.5-flash"),
     ProviderTemplate("NVIDIA NIM", "https://integrate.api.nvidia.com/v1", "meta/llama-3.1-70b-instruct"),
     ProviderTemplate("Groq", "https://api.groq.com/openai/v1", "llama3-70b-8192"),
-    ProviderTemplate("Together AI", "https://api.together.xyz/v1", "meta-llama/Llama-3-70b-chat-hf"),
     ProviderTemplate("Mistral AI", "https://api.mistral.ai/v1", "mistral-large-latest"),
+    ProviderTemplate("Together", "https://api.together.xyz/v1", "meta-llama/Llama-3-70b-chat-hf"),
     ProviderTemplate("Custom OpenAI Endpoint", "http://10.0.2.2:8080/v1", "custom-model")
 )
 
@@ -353,7 +353,13 @@ fun ProviderSetupScreen(
                                 Text(provider.baseUrl, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                             }
 
-                            Row {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (!isActive) {
+                                    TextButton(onClick = { onSelectProvider(provider) }) {
+                                        Text("Als Standard setzen", color = ElectricTeal, fontSize = 11.sp)
+                                    }
+                                }
+
                                 IconButton(
                                     onClick = {
                                         viewModel.loadIntoForm(provider)
@@ -361,11 +367,11 @@ fun ProviderSetupScreen(
                                         showForm = true
                                     }
                                 ) {
-                                    Text("Edit", color = ElectricTeal, fontSize = 12.sp)
+                                    Text("Edit", color = ElectricTeal, fontSize = 11.sp)
                                 }
 
                                 IconButton(onClick = { viewModel.deleteProvider(provider) }) {
-                                    Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red)
+                                    Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red, modifier = Modifier.size(18.dp))
                                 }
                             }
                         }

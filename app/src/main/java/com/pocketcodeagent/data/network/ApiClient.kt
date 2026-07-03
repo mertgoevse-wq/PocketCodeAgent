@@ -10,13 +10,14 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import java.io.BufferedReader
 import java.io.IOException
+import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
 
 object ApiClient {
     private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
         .build()
 
     private val mediaType = "application/json; charset=utf-8".toMediaType()
@@ -31,6 +32,18 @@ object ApiClient {
         }
     }
 
+    private fun getCleanHttpError(code: Int, bodyString: String?): IOException {
+        val msg = when (code) {
+            401 -> "401 Unauthorized: Ungültiger API-Key oder fehlende Autorisierung."
+            403 -> "403 Forbidden: Zugriff verweigert. Überprüfe dein Kontoguthaben oder API-Limits."
+            404 -> "404 Not Found: Modellname oder Endpunkt nicht gefunden."
+            429 -> "429 Too Many Requests: Rate-Limit überschritten. Bitte warte kurz."
+            500 -> "500 Internal Server Error: Serverfehler beim API-Anbieter."
+            else -> "HTTP Fehler $code: ${bodyString?.take(150)}"
+        }
+        return IOException(msg)
+    }
+
     suspend fun testProvider(provider: Provider): Result<String> {
         val fullUrl = getFullUrl(provider.baseUrl)
         val messages = listOf(
@@ -40,6 +53,7 @@ object ApiClient {
             "model" to provider.modelName,
             "messages" to messages,
             "max_tokens" to 5,
+            "temperature" to 0.0,
             "stream" to false
         )
         val requestBodyJson = gson.toJson(requestBodyMap)
@@ -50,12 +64,10 @@ object ApiClient {
             .addHeader("Authorization", "Bearer ${provider.apiKey}")
             .addHeader("Content-Type", "application/json")
 
-        // Add custom headers
         for ((key, value) in provider.customHeaders) {
             requestBuilder.addHeader(key, value)
         }
 
-        // Add special headers for OpenRouter
         if (provider.name.lowercase().contains("openrouter")) {
             requestBuilder.addHeader("HTTP-Referer", "https://github.com/mertgoevse-wq/PocketCodeAgent")
             requestBuilder.addHeader("X-Title", "PocketCodeAgent")
@@ -73,11 +85,13 @@ object ApiClient {
                         .get("content").asString
                     Result.success(content.trim())
                 } else {
-                    Result.failure(IOException("Invalid response body structure: $body"))
+                    Result.failure(IOException("Antwort-Struktur fehlerhaft: $body"))
                 }
             } else {
-                Result.failure(IOException("HTTP Error ${response.code}: ${response.body?.string()}"))
+                Result.failure(getCleanHttpError(response.code, response.body?.string()))
             }
+        } catch (e: SocketTimeoutException) {
+            Result.failure(IOException("Zeitüberschreitung (Timeout) bei der Verbindungsprüfung zum Server.", e))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -92,6 +106,8 @@ object ApiClient {
         val requestBodyMap = mapOf(
             "model" to provider.modelName,
             "messages" to messages,
+            "temperature" to 0.7,
+            "max_tokens" to 2048,
             "stream" to true
         )
         val requestBodyJson = gson.toJson(requestBodyMap)
@@ -114,7 +130,7 @@ object ApiClient {
         return try {
             val response = client.newCall(requestBuilder.build()).execute()
             if (!response.isSuccessful) {
-                return Result.failure(IOException("HTTP Error ${response.code}: ${response.body?.string()}"))
+                return Result.failure(getCleanHttpError(response.code, response.body?.string()))
             }
 
             val body = response.body ?: return Result.failure(IOException("Empty response body"))
@@ -139,11 +155,13 @@ object ApiClient {
                             }
                         }
                     } catch (e: Exception) {
-                        // Suppress parsing errors for malformed SSE chunks
+                        // Suppress SSE formatting errors
                     }
                 }
             }
             Result.success(fullContent.toString())
+        } catch (e: SocketTimeoutException) {
+            Result.failure(IOException("Zeitüberschreitung (Timeout) beim Abrufen der Agenten-Antwort.", e))
         } catch (e: Exception) {
             Result.failure(e)
         }
