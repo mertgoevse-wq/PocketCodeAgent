@@ -29,6 +29,8 @@ import com.pocketcodeagent.domain.agent.AgentAction
 import com.pocketcodeagent.domain.agent.AgentArtifact
 import com.pocketcodeagent.domain.agent.AgentMode
 import com.pocketcodeagent.domain.agent.CommandRiskLevel
+import com.pocketcodeagent.domain.agent.registry.AgentRegistry
+import com.pocketcodeagent.domain.agent.registry.RichAgentRole
 import com.pocketcodeagent.ui.theme.*
 import com.pocketcodeagent.ui.viewmodel.AgentViewModel
 
@@ -214,33 +216,113 @@ private fun AgentActionRow(
     onReviewDiff: (List<FilePatch>) -> Unit
 ) {
     val lastMessageHasPatches = messages.lastOrNull()?.proposedPatches?.isNotEmpty() == true
+    var roleMenuExpanded by remember { mutableStateOf(false) }
+    val selectedRole = viewModel.selectedRegistryRole
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(InputBg)
             .padding(horizontal = 8.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        AgentChip("Plan", ChipBg, TextSecondary, enabled = canRunProvider) {
-            provider?.let { viewModel.runAgentRole(it, AgentRole.PLANNER, workspaceUriString) }
+        // ── Compact Role Selector ──────────────────────────────────────────
+        Box(modifier = Modifier.weight(1f)) {
+            Surface(
+                color = ChipBg,
+                shape = RoundedCornerShape(6.dp),
+                onClick = { roleMenuExpanded = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Psychology,
+                        contentDescription = null,
+                        tint = SlateBlue,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        selectedRole.displayName,
+                        color = TextPrimary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = TextSecondary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+            DropdownMenu(
+                expanded = roleMenuExpanded,
+                onDismissRequest = { roleMenuExpanded = false },
+                containerColor = Color(0xFF1E1E26),
+                modifier = Modifier.heightIn(max = 380.dp)
+            ) {
+                AgentRegistry.ALL.forEach { role ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(role.displayName, color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(role.shortDescription, color = TextSecondary, fontSize = 10.sp, maxLines = 1)
+                            }
+                        },
+                        onClick = {
+                            viewModel.selectedRegistryRole = role
+                            roleMenuExpanded = false
+                        },
+                        leadingIcon = {
+                            Icon(
+                                if (role.id == selectedRole.id) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+                                contentDescription = null,
+                                tint = if (role.id == selectedRole.id) SlateBlue else TextSecondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    )
+                }
+            }
         }
-        AgentChip("Code", SlateBlue, Color.White, enabled = canRunProvider) {
-            provider?.let { viewModel.runAgentRole(it, AgentRole.CODER, workspaceUriString) }
+
+        // ── Run Button ─────────────────────────────────────────────────────
+        Surface(
+            onClick = {
+                provider?.let { viewModel.runAgentRole(it, selectedRole, workspaceUriString) }
+            },
+            enabled = canRunProvider,
+            color = if (canRunProvider) SlateBlue else Color(0xFF2A2A2A),
+            shape = RoundedCornerShape(6.dp),
+            modifier = Modifier.weight(0.6f)
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    "Run",
+                    color = if (canRunProvider) Color.White else Color.Gray,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
-        AgentChip("Review", ChipBg, TextSecondary, enabled = canRunProvider) {
-            provider?.let { viewModel.runAgentRole(it, AgentRole.REVIEWER, workspaceUriString) }
-        }
-        AgentChip("Fix", ChipBg, TextSecondary, enabled = canRunProvider) {
-            provider?.let { viewModel.runAgentRole(it, AgentRole.FIXER, workspaceUriString) }
-        }
-        // Apply button – only enabled when patches are present
+
+        // ── Apply Button ───────────────────────────────────────────────────
         Surface(
             onClick = { messages.lastOrNull()?.proposedPatches?.let { onReviewDiff(it) } },
             enabled = lastMessageHasPatches,
             color = if (lastMessageHasPatches) CalmSage else Color(0xFF2A2A2A),
             shape = RoundedCornerShape(6.dp),
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(0.6f)
         ) {
             Box(
                 contentAlignment = Alignment.Center,
@@ -257,29 +339,6 @@ private fun AgentActionRow(
     }
 }
 
-@Composable
-private fun RowScope.AgentChip(
-    label: String,
-    bg: Color,
-    textColor: Color,
-    enabled: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        color = if (enabled) bg else Color(0xFF242428),
-        shape = RoundedCornerShape(6.dp),
-        modifier = Modifier.weight(1f)
-    ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
-        ) {
-            Text(label, color = if (enabled) textColor else Color(0xFF666672), fontSize = 11.sp)
-        }
-    }
-}
 
 // ─── Chat Input Row ───────────────────────────────────────────────────────────
 @Composable

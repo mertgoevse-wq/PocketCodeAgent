@@ -18,6 +18,8 @@ import com.pocketcodeagent.domain.agent.CommandRiskScanner
 import com.pocketcodeagent.domain.terminal.CommandSource
 import com.pocketcodeagent.domain.terminal.CommandStatus
 import com.pocketcodeagent.domain.terminal.TerminalCommand
+import com.pocketcodeagent.domain.agent.registry.AgentRegistry
+import com.pocketcodeagent.domain.agent.registry.RichAgentRole
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -38,6 +40,9 @@ class AgentViewModel(
     var agentMode by mutableStateOf(AgentMode.DISCUSS)
     var runState by mutableStateOf<AgentRunState>(AgentRunState.Idle)
 
+    // Registry role selection
+    var selectedRegistryRole by mutableStateOf<RichAgentRole>(AgentRegistry.PLANNER)
+
     // Active agent coroutine job for cancellation (Stop Button)
     private var agentJob: Job? = null
 
@@ -57,7 +62,7 @@ class AgentViewModel(
         chatMessages.add(userMsg)
         userInput = ""
 
-        runAgentRole(provider, AgentRole.PLANNER, rootUriString)
+        runAgentRole(provider, selectedRegistryRole, rootUriString)
     }
 
     fun stopAgent() {
@@ -79,13 +84,14 @@ class AgentViewModel(
         activeStreamingText = ""
     }
 
-    fun runAgentRole(provider: Provider, role: AgentRole, rootUriString: String?) {
+    fun runAgentRole(provider: Provider, role: RichAgentRole, rootUriString: String?) {
+        val legacyRole = AgentRegistry.toLegacyOrPlanner(role)
         agentJob?.cancel()
         agentJob = viewModelScope.launch {
             isExecuting = true
-            currentAgentRole = role
+            currentAgentRole = legacyRole
             activeStreamingText = ""
-            runState = if (role == AgentRole.PLANNER) AgentRunState.Planning else AgentRunState.Streaming
+            runState = if (legacyRole == AgentRole.PLANNER) AgentRunState.Planning else AgentRunState.Streaming
 
             val history = chatMessages.toList()
             var lastAgentMessage: ChatMessage? = null
@@ -93,7 +99,7 @@ class AgentViewModel(
             var bufferedText = ""
             var lastUpdate = System.currentTimeMillis()
 
-            agentRepository.runAgent(provider, role, agentMode, history, rootUriString) { chunk ->
+            agentRepository.runAgent(provider, legacyRole, agentMode, history, rootUriString) { chunk ->
                 runState = AgentRunState.Streaming
                 bufferedText += chunk
                 val now = System.currentTimeMillis()
@@ -136,6 +142,11 @@ class AgentViewModel(
                 runState = AgentRunState.Done
             }
         }
+    }
+
+    /** Legacy overload for old AgentRole enum callers (ChatPanel, ChatAgentScreen). */
+    fun runAgentRole(provider: Provider, role: AgentRole, rootUriString: String?) {
+        runAgentRole(provider, AgentRegistry.fromLegacy(role), rootUriString)
     }
 
     fun queueTerminalCommand(command: String) {

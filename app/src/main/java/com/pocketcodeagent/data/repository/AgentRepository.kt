@@ -15,6 +15,9 @@ import com.pocketcodeagent.domain.agent.AgentActionParser
 import com.pocketcodeagent.domain.agent.AgentArtifact
 import com.pocketcodeagent.domain.agent.AgentMode
 import com.pocketcodeagent.domain.agent.CommandRiskLevel
+import com.pocketcodeagent.domain.agent.registry.AgentRegistry
+import com.pocketcodeagent.domain.agent.registry.AgentRolePromptBuilder
+import com.pocketcodeagent.domain.agent.registry.RichAgentRole
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
@@ -25,106 +28,13 @@ class AgentRepository(
     private val workspaceRepository: WorkspaceRepository
 ) {
 
+    private fun getSystemPrompt(role: RichAgentRole, workspaceContext: String, agentMode: AgentMode): String {
+        return AgentRolePromptBuilder.build(role, agentMode, workspaceContext)
+    }
+
+    /** Legacy support: maps old AgentRole enum to RichAgentRole via AgentRegistry. */
     private fun getSystemPrompt(role: AgentRole, workspaceContext: String, agentMode: AgentMode): String {
-        val basePrompt = """
-            You are a subagent inside the PocketCodeAgent Android App.
-            The user is running you locally on their phone without root access.
-            Currently selected project files:
-            $workspaceContext
-            
-            Always keep Android device sandbox limits in mind. No root available.
-            Never request, reveal, echo, or log API keys, Authorization headers, tokens, or secrets.
-            Android app projects must not create folders named example, sample, demo, playground, starter, or template.
-            Do not use com.example packages.
-        """.trimIndent()
-
-        val modePrompt = when (agentMode) {
-            AgentMode.DISCUSS -> """
-
-                Current agent mode: DISCUSS.
-                Do not emit pocketArtifact or pocketAction blocks.
-                Do not propose file actions or shell command actions.
-                Explain, plan, and ask clarifying questions when needed.
-            """.trimIndent()
-            AgentMode.BUILD -> """
-
-                Current agent mode: BUILD.
-                When proposing changes, use this exact artifact format:
-                <pocketArtifact title="Short title">
-                  <pocketAction type="file" filePath="relative/path.ext">
-                    full file content
-                  </pocketAction>
-                  <pocketAction type="modify" filePath="relative/path.ext" oldText="exact old text if known">
-                    replacement text
-                  </pocketAction>
-                  <pocketAction type="shell">
-                    command only
-                  </pocketAction>
-                  <pocketAction type="preview">
-                    http://127.0.0.1:5173
-                  </pocketAction>
-                  <pocketAction type="note">
-                    short note
-                  </pocketAction>
-                </pocketArtifact>
-                Do not merely describe file changes; put them in pocketAction blocks.
-                Shell commands are only suggestions. Never claim they were executed.
-                Do not suggest dangerous commands, destructive commands, sudo/su, rm -rf, curl|sh, wget|sh, or encoded PowerShell.
-                All file changes must be reviewable; do not imply automatic application.
-            """.trimIndent()
-        }
-
-        return when (role) {
-            AgentRole.PLANNER -> """
-                $basePrompt
-                $modePrompt
-                Your task is to analyze the user request and create a detailed checklist execution plan.
-                Do not write code. Outline the files that need to be created or modified, and details on what changes to perform.
-                Output your plan clearly using Markdown.
-            """.trimIndent()
-
-            AgentRole.CODER -> """
-                $basePrompt
-                $modePrompt
-                Your task is to implement the plan by suggesting code changes.
-                In BUILD mode, emit pocketArtifact/pocketAction blocks for every file, command, preview, or note action.
-                In DISCUSS mode, explain the implementation approach without pocketActions.
-            """.trimIndent()
-
-            AgentRole.REVIEWER -> """
-                $basePrompt
-                $modePrompt
-                Your task is to review the proposed code changes.
-                Ensure there are no compilation errors, syntax errors, or logical bugs.
-                Output your review in markdown. State clearly if you APPROVE or REJECT the changes with reasons.
-            """.trimIndent()
-
-            AgentRole.FIXER -> """
-                $basePrompt
-                $modePrompt
-                Your task is to fix any compilation or runtime errors reported by the user.
-                In BUILD mode, emit pocketArtifact/pocketAction blocks for every suggested fix.
-                In DISCUSS mode, explain the likely cause and fix plan without pocketActions.
-            """.trimIndent()
-
-            AgentRole.PREVIEW -> """
-                $basePrompt
-                $modePrompt
-                Your task is to inspect the project structure and suggest previews.
-                If there is an index.html, recommend viewing it.
-                If this is a Node/Vite/React project, explain that local Node execution needs Termux bridge (e.g. running 'npm run dev' on local port 5173).
-                Provide clean step-by-step preview guidelines.
-            """.trimIndent()
-
-            AgentRole.TERMINAL -> """
-                $basePrompt
-                $modePrompt
-                Your task is to recommend shell commands (e.g., git status, gradle build, npm install) that the user should execute.
-                In BUILD mode, wrap each command in a pocketAction type="shell" block.
-                In DISCUSS mode, explain commands in prose only.
-                Never suggest destructive commands. Keep commands safe.
-            """.trimIndent()
-        }
+        return getSystemPrompt(AgentRegistry.fromLegacy(role), workspaceContext, agentMode)
     }
 
     fun runAgent(
@@ -273,16 +183,7 @@ class AgentRepository(
     }
 
     private fun formatFilesContext(files: List<WorkspaceFile>, indent: String = ""): String {
-        val builder = StringBuilder()
-        for (file in files) {
-            if (file.isDirectory) {
-                builder.append(indent).append("📁 ").append(file.name).append("/\n")
-                builder.append(formatFilesContext(file.children, "$indent  "))
-            } else {
-                builder.append(indent).append("📄 ").append(file.name).append(" (${file.size} bytes)\n")
-            }
-        }
-        return builder.toString()
+        return AgentRolePromptBuilder.formatFilesContext(files, indent)
     }
 
     private fun parseAgentResponse(text: String): AgentResponse? {
