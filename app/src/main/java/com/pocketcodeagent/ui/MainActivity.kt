@@ -112,29 +112,25 @@ class MainActivity : ComponentActivity() {
 
                     "diff" -> DiffReviewScreen(
                         viewModel = workspaceViewModel,
-                        proposedChanges = mainViewModel.pendingFileChanges,
+                        proposedPatches = mainViewModel.pendingFileChanges,
                         currentIndex = mainViewModel.currentDiffFileIndex,
                         rootWorkspaceUriString = mainViewModel.selectedWorkspaceUri,
                         onApplyChange = { appliedChange ->
-                            // Update current diff index or remove applied
-                            val updated = mainViewModel.pendingFileChanges.map {
-                                if (it.relativePath == appliedChange.relativePath) it.copy(isApplied = true) else it
-                            }
+                            val updated = mainViewModel.pendingFileChanges.filter { it.path != appliedChange.path }
                             mainViewModel.pendingFileChanges = updated
-                            
-                            // Check if there are other unapplied files
-                            val nextUnappliedIndex = updated.indexOfFirst { !it.isApplied }
-                            if (nextUnappliedIndex != -1) {
-                                mainViewModel.currentDiffFileIndex = nextUnappliedIndex
+                            if (updated.isNotEmpty()) {
+                                mainViewModel.currentDiffFileIndex = 0
                             } else {
                                 mainViewModel.navigateTo("chat")
                             }
                         },
                         onRejectChange = {
-                            val nextIndex = mainViewModel.currentDiffFileIndex + 1
-                            if (nextIndex < mainViewModel.pendingFileChanges.size) {
-                                mainViewModel.currentDiffFileIndex = nextIndex
-                            } else {
+                            val updated = mainViewModel.pendingFileChanges.filterIndexed { idx, _ -> idx != mainViewModel.currentDiffFileIndex }
+                            mainViewModel.pendingFileChanges = updated
+                            if (mainViewModel.currentDiffFileIndex >= updated.size) {
+                                mainViewModel.currentDiffFileIndex = maxOf(0, updated.size - 1)
+                            }
+                            if (updated.isEmpty()) {
                                 mainViewModel.navigateTo("chat")
                             }
                         },

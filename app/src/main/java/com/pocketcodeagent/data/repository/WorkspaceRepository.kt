@@ -3,6 +3,8 @@ package com.pocketcodeagent.data.repository
 import android.content.Context
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
+import com.pocketcodeagent.data.local.DocumentFileWorkspace
+import com.pocketcodeagent.data.local.DocumentFileWorkspaceImpl
 import com.pocketcodeagent.data.local.WorkspaceManager
 import com.pocketcodeagent.data.model.WorkspaceFile
 
@@ -16,7 +18,8 @@ data class DiffLine(
     val lineNumber: Int
 )
 
-class WorkspaceRepository(private val context: Context) {
+class WorkspaceRepository(val context: Context) {
+    val workspace: DocumentFileWorkspace = DocumentFileWorkspaceImpl(context)
 
     fun persistWorkspacePermission(uri: Uri) {
         WorkspaceManager.takePersistableUriPermission(context, uri)

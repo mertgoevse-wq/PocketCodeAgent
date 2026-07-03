@@ -19,7 +19,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pocketcodeagent.data.model.ProposedFileChange
+import com.pocketcodeagent.data.model.FilePatch
 import com.pocketcodeagent.data.repository.DiffLine
 import com.pocketcodeagent.data.repository.DiffLineType
 import com.pocketcodeagent.ui.theme.ElectricTeal
@@ -31,19 +31,19 @@ import com.pocketcodeagent.ui.viewmodel.WorkspaceViewModel
 @Composable
 fun DiffReviewScreen(
     viewModel: WorkspaceViewModel,
-    proposedChanges: List<ProposedFileChange>,
+    proposedPatches: List<FilePatch>,
     currentIndex: Int,
     rootWorkspaceUriString: String?,
-    onApplyChange: (ProposedFileChange) -> Unit,
+    onApplyChange: (FilePatch) -> Unit,
     onRejectChange: () -> Unit,
     onBackClick: () -> Unit
 ) {
-    val activeChange = proposedChanges.getOrNull(currentIndex)
+    val activeChange = proposedPatches.getOrNull(currentIndex)
 
     // Compute diff when active change updates
-    LaunchedEffect(activeChange) {
-        activeChange?.let {
-            viewModel.prepareDiff(it)
+    LaunchedEffect(activeChange, rootWorkspaceUriString) {
+        if (activeChange != null && rootWorkspaceUriString != null) {
+            viewModel.prepareDiff(rootWorkspaceUriString, activeChange)
         }
     }
 
@@ -55,7 +55,7 @@ fun DiffReviewScreen(
                         Text("Review Code Changes", color = Color.White)
                         activeChange?.let {
                             Text(
-                                text = "${it.relativePath} (${currentIndex + 1}/${proposedChanges.size})",
+                                text = "${it.path} (${currentIndex + 1}/${proposedPatches.size})",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = ElectricTeal
                             )
@@ -72,39 +72,62 @@ fun DiffReviewScreen(
         },
         bottomBar = {
             if (activeChange != null) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Color(0xFF0F0C1B))
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Button(
-                        onClick = onRejectChange,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(imageVector = Icons.Default.Close, contentDescription = null, tint = Color.White)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Reject", color = Color.White, fontWeight = FontWeight.Bold)
+                    // Visual error banner if patch fails (e.g. missing write permissions)
+                    viewModel.workspaceError?.let { error ->
+                        Surface(
+                            color = Color.Red.copy(alpha = 0.2f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "⚠️ Error: $error",
+                                color = Color(0xFFFF8888),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            )
+                        }
                     }
 
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    Button(
-                        onClick = {
-                            if (rootWorkspaceUriString != null) {
-                                viewModel.applyProposedChange(rootWorkspaceUriString, activeChange) {
-                                    onApplyChange(activeChange)
-                                }
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = ElectricTeal),
-                        modifier = Modifier.weight(1f)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = Color(0xFF0C0A14))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Accept & Apply", color = Color(0xFF0C0A14), fontWeight = FontWeight.Bold)
+                        Button(
+                            onClick = onRejectChange,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(imageVector = Icons.Default.Close, contentDescription = null, tint = Color.White)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Reject", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        Button(
+                            onClick = {
+                                if (rootWorkspaceUriString != null) {
+                                    viewModel.applyPatch(rootWorkspaceUriString, activeChange) { success ->
+                                        if (success) {
+                                            onApplyChange(activeChange)
+                                        }
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ElectricTeal),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = Color(0xFF0C0A14))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Accept & Apply", color = Color(0xFF0C0A14), fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
@@ -129,13 +152,36 @@ fun DiffReviewScreen(
                     Text("All proposed changes have been reviewed!", color = Color.White, fontSize = 16.sp)
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color(0xFF07050E))
-                ) {
-                    items(viewModel.activeDiffLines) { diffLine ->
-                        DiffLineItem(diffLine)
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Surface(
+                        color = Color(0xFF131024),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Action: ${activeChange.action.uppercase()}",
+                                color = when (activeChange.action.lowercase()) {
+                                    "create" -> Color(0xFF88FF88)
+                                    "delete" -> Color(0xFFFF8888)
+                                    else -> ElectricTeal
+                                },
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .background(Color(0xFF07050E))
+                    ) {
+                        items(viewModel.activeDiffLines) { diffLine ->
+                            DiffLineItem(diffLine)
+                        }
                     }
                 }
             }

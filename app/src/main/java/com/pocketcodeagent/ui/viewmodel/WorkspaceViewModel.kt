@@ -2,11 +2,12 @@ package com.pocketcodeagent.ui.viewmodel
 
 import android.net.Uri
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.pocketcodeagent.data.model.ProposedFileChange
+import com.pocketcodeagent.data.model.FilePatch
 import com.pocketcodeagent.data.model.WorkspaceFile
 import com.pocketcodeagent.data.repository.DiffLine
 import com.pocketcodeagent.data.repository.WorkspaceRepository
@@ -26,6 +27,12 @@ class WorkspaceViewModel(val repository: WorkspaceRepository) : ViewModel() {
 
     // Diff view lines
     var activeDiffLines by mutableStateOf<List<DiffLine>>(emptyList())
+
+    // History of applied patches (to support Undo!)
+    val appliedPatchesHistory = mutableStateListOf<FilePatch>()
+
+    // Current operation logs/status for UI
+    var workspaceError by mutableStateOf<String?>(null)
 
     fun initializeWorkspacePermission(uri: Uri) {
         repository.persistWorkspacePermission(uri)
@@ -67,26 +74,92 @@ class WorkspaceViewModel(val repository: WorkspaceRepository) : ViewModel() {
         }
     }
 
-    fun prepareDiff(change: ProposedFileChange) {
+    fun prepareDiff(rootUriString: String, patch: FilePatch) {
         viewModelScope.launch {
-            val original = change.originalContent
-            val modified = change.newContent
+            workspaceError = null
+            repository.workspace.setRootUri(rootUriString)
+            
+            val original = if (patch.action.lowercase() == "create") {
+                ""
+            } else {
+                withContext(Dispatchers.IO) {
+                    repository.workspace.readFile(patch.path) ?: ""
+                }
+            }
+            
+            val modified = if (patch.action.lowercase() == "delete") {
+                ""
+            } else {
+                patch.newText
+            }
+            
             val diff = withContext(Dispatchers.IO) {
-                repository.computeDiff(original, modified)
+                com.pocketcodeagent.data.util.DiffGenerator.computeDiff(original, modified)
             }
             activeDiffLines = diff
         }
     }
 
-    fun applyProposedChange(rootUriString: String, change: ProposedFileChange, onComplete: () -> Unit) {
+    fun applyPatch(rootUriString: String, patch: FilePatch, onComplete: (Boolean) -> Unit) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                val fileUri = repository.createOrGetFileUriByRelativePath(rootUriString, change.relativePath)
-                if (fileUri != null) {
-                    repository.writeFile(fileUri.toString(), change.newContent)
+            workspaceError = null
+            repository.workspace.setRootUri(rootUriString)
+            
+            val result = withContext(Dispatchers.IO) {
+                com.pocketcodeagent.data.util.PatchApplier.applyPatch(repository.workspace, patch)
+            }
+            
+            when (result) {
+                is com.pocketcodeagent.data.util.PatchApplier.PatchResult.Success -> {
+                    appliedPatchesHistory.add(patch)
+                    onComplete(true)
+                }
+                is com.pocketcodeagent.data.util.PatchApplier.PatchResult.Error -> {
+                    workspaceError = result.message
+                    onComplete(false)
                 }
             }
-            onComplete()
+        }
+    }
+
+    fun undoLastPatch(rootUriString: String, onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            if (appliedPatchesHistory.isEmpty()) {
+                onComplete(false)
+                return@launch
+            }
+            
+            workspaceError = null
+            repository.workspace.setRootUri(rootUriString)
+            val lastPatch = appliedPatchesHistory.last()
+            
+            val success = withContext(Dispatchers.IO) {
+                com.pocketcodeagent.data.util.PatchApplier.undoPatch(repository.workspace, lastPatch)
+            }
+            
+            if (success) {
+                appliedPatchesHistory.removeAt(appliedPatchesHistory.size - 1)
+                onComplete(true)
+            } else {
+                workspaceError = "Failed to undo patch for file: ${lastPatch.path}"
+                onComplete(false)
+            }
+        }
+    }
+
+    fun createFile(parentUriString: String, mimeType: String, fileName: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                repository.createFile(parentUriString, mimeType, fileName)
+            }
+        }
+    }
+
+    fun createDirectory(parentUriString: String, dirName: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                repository.createDirectory(parentUriString, dirName)
+            }
         }
     }
 }

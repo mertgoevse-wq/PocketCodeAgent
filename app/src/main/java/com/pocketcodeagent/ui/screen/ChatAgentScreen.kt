@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pocketcodeagent.data.model.AgentRole
 import com.pocketcodeagent.data.model.ChatMessage
-import com.pocketcodeagent.data.model.ProposedFileChange
+import com.pocketcodeagent.data.model.FilePatch
 import com.pocketcodeagent.data.model.Provider
 import com.pocketcodeagent.ui.theme.ElectricTeal
 import com.pocketcodeagent.ui.theme.GlowPink
@@ -33,7 +33,7 @@ fun ChatAgentScreen(
     viewModel: AgentViewModel,
     provider: Provider?,
     workspaceUriString: String?,
-    onReviewDiff: (List<ProposedFileChange>) -> Unit,
+    onReviewDiff: (List<FilePatch>) -> Unit,
     onBackClick: () -> Unit
 ) {
     val messages = viewModel.chatMessages
@@ -92,7 +92,7 @@ fun ChatAgentScreen(
                 items(messages) { message ->
                     MessageBubble(
                         message = message,
-                        onReviewDiff = { onReviewDiff(message.proposedChanges) },
+                        onReviewDiff = { onReviewDiff(message.proposedPatches) },
                         onExecuteCommand = { viewModel.executeTerminalCommand(it) }
                     )
                 }
@@ -258,7 +258,7 @@ fun MessageBubble(
                 )
 
                 // Diffs Banner
-                if (message.proposedChanges.isNotEmpty()) {
+                if (message.proposedPatches.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Button(
                         onClick = onReviewDiff,
@@ -267,7 +267,7 @@ fun MessageBubble(
                         Icon(imageVector = Icons.Default.Compare, contentDescription = null, tint = Color(0xFF0C0A14), modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Review proposed code changes (${message.proposedChanges.size})",
+                            text = "Review proposed code changes (${message.proposedPatches.size})",
                             color = Color(0xFF0C0A14),
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp
@@ -286,26 +286,37 @@ fun MessageBubble(
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = cmd,
-                                    color = Color.LightGray,
-                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                    fontSize = 11.sp,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Button(
-                                    onClick = { onExecuteCommand(cmd) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = NeonPurple),
-                                    shape = RoundedCornerShape(6.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("Run", color = Color.White, fontSize = 10.sp)
+                                    Text(
+                                        text = cmd.command,
+                                        color = Color.LightGray,
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                        fontSize = 11.sp,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Button(
+                                        onClick = { onExecuteCommand(cmd.command) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = NeonPurple),
+                                        shape = RoundedCornerShape(6.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("Run", color = Color.White, fontSize = 10.sp)
+                                    }
+                                }
+                                if (cmd.reason.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Reason: ${cmd.reason}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.Gray,
+                                        fontSize = 10.sp
+                                    )
                                 }
                             }
                         }

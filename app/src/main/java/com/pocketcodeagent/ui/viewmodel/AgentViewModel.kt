@@ -8,7 +8,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pocketcodeagent.data.model.AgentRole
 import com.pocketcodeagent.data.model.ChatMessage
-import com.pocketcodeagent.data.model.ProposedFileChange
 import com.pocketcodeagent.data.model.Provider
 import com.pocketcodeagent.data.repository.AgentRepository
 import com.pocketcodeagent.data.repository.ProviderRepository
@@ -70,7 +69,7 @@ class AgentViewModel(
             lastAgentMessage?.let {
                 chatMessages.add(it)
                 if (it.proposedCommands.isNotEmpty()) {
-                    recommendedCommands.addAll(it.proposedCommands)
+                    recommendedCommands.addAll(it.proposedCommands.map { cmd -> cmd.command })
                 }
             }
         }

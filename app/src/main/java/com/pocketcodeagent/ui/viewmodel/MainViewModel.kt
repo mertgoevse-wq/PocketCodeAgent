@@ -4,7 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
-import com.pocketcodeagent.data.model.ProposedFileChange
+import com.pocketcodeagent.data.model.FilePatch
 import com.pocketcodeagent.data.model.Provider
 
 class MainViewModel : ViewModel() {
@@ -19,7 +19,7 @@ class MainViewModel : ViewModel() {
     var selectedFileName by mutableStateOf<String?>(null)
 
     // Diff Review State
-    var pendingFileChanges by mutableStateOf<List<ProposedFileChange>>(emptyList())
+    var pendingFileChanges by mutableStateOf<List<FilePatch>>(emptyList())
     var currentDiffFileIndex by mutableStateOf(0)
 
     fun navigateTo(screen: String) {

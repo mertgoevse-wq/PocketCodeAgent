@@ -2,10 +2,13 @@ package com.pocketcodeagent.data.repository
 
 import com.pocketcodeagent.data.model.AgentRole
 import com.pocketcodeagent.data.model.ChatMessage
-import com.pocketcodeagent.data.model.ProposedFileChange
+import com.pocketcodeagent.data.model.FilePatch
+import com.pocketcodeagent.data.model.AgentCommand
+import com.pocketcodeagent.data.model.AgentResponse
 import com.pocketcodeagent.data.model.Provider
 import com.pocketcodeagent.data.model.WorkspaceFile
 import com.pocketcodeagent.data.network.ApiClient
+import com.google.gson.Gson
 import kotlinx.coroutines.flow.flow
 import java.util.regex.Pattern
 
@@ -16,7 +19,8 @@ class AgentRepository(
 
     private fun getSystemPrompt(role: AgentRole, workspaceContext: String): String {
         val basePrompt = """
-            You are ${role.displayName}, an elite AI coding agent in the PocketCodeAgent ecosystem on Android.
+            You are a subagent inside the PocketCodeAgent Android App.
+            The user is running you locally on their phone without root access.
             Currently selected project files:
             $workspaceContext
             
@@ -34,12 +38,29 @@ class AgentRepository(
             AgentRole.CODER -> """
                 $basePrompt
                 Your task is to implement the plan by suggesting code changes.
-                If you want to create or overwrite a file, wrap the entire file content exactly like this:
-                <<<< FILE: relative/path/to/file.ext >>>>
-                file content here
-                <<<< END >>>>
+                You MUST respond STRICTLY with a single JSON object matching the format below.
+                DO NOT wrap it in HTML/Markdown text other than optional ```json ... ``` blocks.
+                DO NOT write conversational explanations outside the JSON. All comments must go into the "summary" field.
                 
-                You can specify multiple file blocks in one response. Do not use placeholders. Provide complete implementations.
+                Strict JSON Output Format:
+                {
+                  "summary": "Detailed summary of changes and explanations.",
+                  "patches": [
+                    {
+                      "path": "src/App.tsx",
+                      "action": "create|modify|delete",
+                      "oldText": "if action is modify, the exact old text block to replace. If create, leave empty.",
+                      "newText": "the new text to write or replace with."
+                    }
+                  ],
+                  "commands": [
+                    {
+                      "command": "npm install",
+                      "reason": "Explain why this command is needed",
+                      "requiresConfirmation": true
+                    }
+                  ]
+                }
             """.trimIndent()
 
             AgentRole.REVIEWER -> """
@@ -52,10 +73,23 @@ class AgentRepository(
             AgentRole.FIXER -> """
                 $basePrompt
                 Your task is to fix any compilation or runtime errors reported by the user.
-                Suggest corrective code edits using the same format:
-                <<<< FILE: relative/path/to/file.ext >>>>
-                corrected content
-                <<<< END >>>>
+                You MUST respond STRICTLY with a single JSON object matching the format below.
+                DO NOT wrap it in HTML/Markdown text other than optional ```json ... ``` blocks.
+                DO NOT write conversational explanations outside the JSON. All comments must go into the "summary" field.
+                
+                Strict JSON Output Format:
+                {
+                  "summary": "Detailed summary of the fixes applied.",
+                  "patches": [
+                    {
+                      "path": "src/App.tsx",
+                      "action": "create|modify|delete",
+                      "oldText": "exact old text block to replace",
+                      "newText": "the corrected text"
+                    }
+                  ],
+                  "commands": []
+                }
             """.trimIndent()
 
             AgentRole.PREVIEW -> """
@@ -116,17 +150,37 @@ class AgentRepository(
             val fullText = result.getOrThrow()
             providerRepository.log(role.displayName, "Completed execution successfully.")
             
-            // 4. Parse any special payloads (files, commands) from assistant's output
-            val proposedChanges = parseProposedFileChanges(rootUriString, fullText)
-            val proposedCommands = parseProposedCommands(fullText)
+            val proposedPatches = mutableListOf<FilePatch>()
+            val proposedCommands = mutableListOf<AgentCommand>()
+            var displayedMessage = fullText
+
+            if (role == AgentRole.CODER || role == AgentRole.FIXER) {
+                val parsed = parseAgentResponse(fullText)
+                if (parsed != null) {
+                    proposedPatches.addAll(parsed.patches)
+                    proposedCommands.addAll(parsed.commands)
+                    displayedMessage = parsed.summary
+                } else {
+                    providerRepository.log(role.displayName, "JSON parsing failed. Attempting regex fallback.", "WARNING")
+                    // Fallback to parse old style if LLM did not respect JSON
+                    val parsedChanges = parseRegexFileChanges(rootUriString, fullText)
+                    proposedPatches.addAll(parsedChanges)
+                    val parsedCmds = parseRegexCommands(fullText)
+                    proposedCommands.addAll(parsedCmds)
+                }
+            } else {
+                // If it is another agent role, parse any recommended commands
+                val parsedCmds = parseRegexCommands(fullText)
+                proposedCommands.addAll(parsedCmds)
+            }
 
             emit(
                 ChatMessage(
                     sender = role.displayName,
-                    message = fullText,
+                    message = displayedMessage,
                     isAgent = true,
                     agentRole = role,
-                    proposedChanges = proposedChanges,
+                    proposedPatches = proposedPatches,
                     proposedCommands = proposedCommands
                 )
             )
@@ -157,19 +211,34 @@ class AgentRepository(
         return builder.toString()
     }
 
-    private fun parseProposedFileChanges(rootUriString: String?, text: String): List<ProposedFileChange> {
+    private fun parseAgentResponse(text: String): AgentResponse? {
+        return try {
+            var jsonText = text.trim()
+            if (jsonText.startsWith("```json")) {
+                jsonText = jsonText.removePrefix("```json")
+            } else if (jsonText.startsWith("```")) {
+                jsonText = jsonText.removePrefix("```")
+            }
+            if (jsonText.endsWith("```")) {
+                jsonText = jsonText.removeSuffix("```")
+            }
+            jsonText = jsonText.trim()
+            Gson().fromJson(jsonText, AgentResponse::class.java)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun parseRegexFileChanges(rootUriString: String?, text: String): List<FilePatch> {
         if (rootUriString == null) return emptyList()
-        val changes = mutableListOf<ProposedFileChange>()
-        
-        // Match <<<< FILE: relative_path >>>> content <<<< END >>>>
+        val patches = mutableListOf<FilePatch>()
         val pattern = Pattern.compile("<<<<\\s*FILE:\\s*([^>]+)\\s*>>>>(.*?)<<<<\\s*END\\s*>>>>", Pattern.DOTALL)
         val matcher = pattern.matcher(text)
         
         while (matcher.find()) {
             val path = matcher.group(1).trim()
-            val content = matcher.group(2) // Content of the file
+            val content = matcher.group(2)
             
-            // Get original content if file exists
             val originalContent = try {
                 val fileUri = workspaceRepository.getFileUriByRelativePath(rootUriString, path)
                 if (fileUri != null) {
@@ -181,23 +250,30 @@ class AgentRepository(
                 ""
             }
             
-            changes.add(
-                ProposedFileChange(
-                    relativePath = path,
-                    originalContent = originalContent,
-                    newContent = content
+            patches.add(
+                FilePatch(
+                    path = path,
+                    action = if (originalContent.isEmpty()) "create" else "modify",
+                    oldText = originalContent,
+                    newText = content
                 )
             )
         }
-        return changes
+        return patches
     }
 
-    private fun parseProposedCommands(text: String): List<String> {
-        val commands = mutableListOf<String>()
+    private fun parseRegexCommands(text: String): List<AgentCommand> {
+        val commands = mutableListOf<AgentCommand>()
         val pattern = Pattern.compile("<<<<\\s*CMD:\\s*([^>]+)\\s*>>>>")
         val matcher = pattern.matcher(text)
         while (matcher.find()) {
-            commands.add(matcher.group(1).trim())
+            commands.add(
+                AgentCommand(
+                    command = matcher.group(1).trim(),
+                    reason = "Recommended by agent",
+                    requiresConfirmation = true
+                )
+            )
         }
         return commands
     }

@@ -29,19 +29,7 @@
 
 ### ViewModels & Jetpack Compose UI
 - **ViewModels (`MainViewModel`, `ProviderViewModel`, `WorkspaceViewModel`, `AgentViewModel`)**: Bound all repositories, handled navigation routing, forms validation, folder picker callbacks, chat messaging state, text-diff calculations, and diagnostic log collection.
-- **Compose Screens**: Created all 12 requested user interface screens:
-  1. `WelcomeScreen` (Onboarding description)
-  2. `ProviderSetupScreen` (Preset configs, API forms, and connection test terminal)
-  3. `WorkspacePickerScreen` (SAF folder selection)
-  4. `ProjectDashboardScreen` (Core navigation center)
-  5. `ChatAgentScreen` (AI chat stream and proposed changes/command triggers)
-  6. `FileExplorerScreen` (Expandable file tree hierarchy with creation dialog)
-  7. `CodeEditorScreen` (Monospaced local source editor)
-  8. `DiffReviewScreen` (Line-by-line green/red code diff reviews)
-  9. `TerminalScreen` (Bridge console details and recommended command approvals)
-  10. `LivePreviewScreen` (Embedded WebView running static index.html or local Dev server URL)
-  11. `SettingsScreen` (Reset options and security descriptions)
-  12. `LogsScreen` (Color-coded diagnostic log output console)
+- **Compose Screens**: Created all 12 requested user interface screens.
 
 ### Compilation & Build Error Resolutions
 - **Issue 1**: Gradle KSP plugin search failed in Google Maven repository.
@@ -52,3 +40,33 @@
   - *Fix*: Added `ksp.useKSP2=false` to `gradle.properties` to use the stable KSP compiler.
 - **Issue 4**: Missing Android SDK path.
   - *Fix*: Generated a `local.properties` file specifying the local Android SDK path.
+
+---
+
+### Expansion: Real Agentic File Editing (Workflow & Safety Core)
+
+- **FilePatch Model (`FilePatch.kt`)**:
+  - Implemented the `FilePatch` model class representing structured file edit operations (create/modify/delete) with `path`, `action`, `oldText`, and `newText` properties.
+  - Added the `AgentCommand` model representing terminal execution triggers with `command`, `reason`, and `requiresConfirmation` fields.
+  - Added the `AgentResponse` wrapper representing the strict JSON schema to be output by Coder/Fixer agents.
+
+- **DocumentFileWorkspace adapter (`DocumentFileWorkspace.kt`)**:
+  - Abstracted Android Storage Access Framework (SAF) operations into a clean, reusable `DocumentFileWorkspace` interface and `DocumentFileWorkspaceImpl` class.
+  - Implemented automatic pre-patch backups (generating `.bak` and `.deleted_bak` files inside the workspace directory) to enable full, persistent `Undo` capability.
+  - Added explicit write-permission checks (`rootDoc.canWrite()`) to trigger appropriate warning banners during patch failures.
+
+- **Diff Generator & Patch Applier (`DiffGenerator.kt`, `PatchApplier.kt`)**:
+  - Moved line-by-line diff computation into a dedicated `DiffGenerator` utility.
+  - Created `PatchApplier` coordinating execution of patches (creating directories and files, searching/replacing `oldText` chunks with `newText` content, and performing deletions) with error containment and backup restorations on `undo`.
+
+- **Strict JSON Prompts & Robust Parser (`AgentRepository.kt`)**:
+  - Updated the system prompts for `CODER` and `FIXER` agents to strictly require a single, un-wrapped JSON block matching the `AgentResponse` schema.
+  - Built a robust JSON parser within `AgentRepository.kt` that automatically strips markdown code blocks (e.g. ` ```json ` tags) before deserializing with Gson.
+  - Retained regex-based parsing fallbacks (for `<<<< FILE: path >>>>` and `<<<< CMD: command >>>>`) for flexibility if a provider returns plain conversational texts.
+
+- **UI & ViewModels Integration**:
+  - Updated `ChatMessage.kt` to reference lists of `FilePatch` and `AgentCommand` objects.
+  - Exposed `DocumentFileWorkspace` operations and error states through `WorkspaceRepository.kt` and `WorkspaceViewModel.kt`. Exposed `applyPatch`, `prepareDiff`, and `undoLastPatch` methods.
+  - Modified `ChatAgentScreen.kt` to pass lists of `FilePatch` objects to the reviewer flow, and display recommended commands alongside their descriptive reasons.
+  - Rewrote `DiffReviewScreen.kt` to render patch action types, apply patches via `WorkspaceViewModel`, and display write-permission error banners dynamically.
+  - Integrated `MainActivity.kt` and `MainViewModel.kt` to route file patches and filter accepted/rejected entries in the state stack.
