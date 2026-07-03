@@ -118,6 +118,75 @@ class AgentRepository(
         rootUriString: String?,
         onChunk: (String) -> Unit
     ) = flow {
+        if (provider.id == 999) {
+            // Simulated demo agent run
+            val mockChunks = when(role) {
+                AgentRole.PLANNER -> listOf(
+                    "### 📋 Demo-Ausführungsplan\n\n",
+                    "1. Analysiere das Projekt.\n",
+                    "2. Aktualisiere `script.js` mit einer neuen Testfunktion.\n",
+                    "3. Zeige die Diffs im Review-Screen an.\n\n",
+                    "Klicke auf den Coder-Agenten, um diesen Plan umzusetzen! 🤖"
+                )
+                AgentRole.CODER -> listOf(
+                    "{\n",
+                    "  \"summary\": \"Ich habe script.js aktualisiert, um eine Testfunktion hinzuzufügen.\",\n",
+                    "  \"patches\": [\n",
+                    "    {\n",
+                    "      \"path\": \"script.js\",\n",
+                    "      \"action\": \"modify\",\n",
+                    "      \"oldText\": \"function testDemo() {\\n    return \\\"Demo Mode Active\\\";\\n}\",\n",
+                    "      \"newText\": \"function testDemo() {\\n    console.log(\\\"Demo-Aufruf erfolgreich!\\\");\\n    return \\\"Demo Mode Active (Updated)\\\";\\n}\"\n",
+                    "    }\n",
+                    "  ],\n",
+                    "  \"commands\": [\n",
+                    "    {\n",
+                    "      \"command\": \"node script.js\",\n",
+                    "      \"reason\": \"Führe das Skript aus, um die Ausgabe zu prüfen.\",\n",
+                    "      \"requiresConfirmation\": true\n",
+                    "    }\n",
+                    "  ]\n",
+                    "}"
+                )
+                else -> listOf("Erfolgreicher Demo-Lauf für Rolle: ${role.displayName}")
+            }
+
+            var fullText = ""
+            for (chunk in mockChunks) {
+                kotlinx.coroutines.delay(100)
+                onChunk(chunk)
+                fullText += chunk
+            }
+            
+            val proposedPatches = mutableListOf<FilePatch>()
+            val proposedCommands = mutableListOf<AgentCommand>()
+            var displayedMessage = fullText
+
+            if (role == AgentRole.CODER || role == AgentRole.FIXER) {
+                val parsed = parseAgentResponse(fullText)
+                if (parsed != null) {
+                    proposedPatches.addAll(parsed.patches)
+                    proposedCommands.addAll(parsed.commands)
+                    displayedMessage = parsed.summary
+                }
+            } else {
+                val parsedCmds = parseRegexCommands(fullText)
+                proposedCommands.addAll(parsedCmds)
+            }
+
+            emit(
+                ChatMessage(
+                    sender = role.displayName,
+                    message = displayedMessage,
+                    isAgent = true,
+                    agentRole = role,
+                    proposedPatches = proposedPatches,
+                    proposedCommands = proposedCommands
+                )
+            )
+            return@flow
+        }
+
         // 1. Gather workspace file list for context
         val workspaceContext = if (rootUriString != null) {
             try {

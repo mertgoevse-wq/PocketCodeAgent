@@ -3,11 +3,15 @@ package com.pocketcodeagent.ui.screen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Web
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -15,29 +19,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pocketcodeagent.R
-import com.pocketcodeagent.ui.theme.ElectricTeal
-import com.pocketcodeagent.ui.theme.GlowPink
-import com.pocketcodeagent.ui.theme.NeonPurple
+import com.pocketcodeagent.ui.theme.CalmSage
+import com.pocketcodeagent.ui.theme.DeepSlateBackground
+import com.pocketcodeagent.ui.theme.SlateBlue
+import com.pocketcodeagent.ui.theme.TextPrimary
+import com.pocketcodeagent.ui.theme.TextSecondary
+import com.pocketcodeagent.ui.theme.WarmCopper
 
 @Composable
-fun WelcomeScreen(onGetStartedClick: () -> Unit) {
+fun WelcomeScreen(
+    onGetStartedClick: () -> Unit,
+    onStartDemoModeClick: () -> Unit
+) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF100D22),
-                        Color(0xFF07050E)
-                    )
-                )
-            )
+            .background(DeepSlateBackground)
             .padding(24.dp)
     ) {
         Column(
@@ -45,118 +46,140 @@ fun WelcomeScreen(onGetStartedClick: () -> Unit) {
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Icon
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // App Brand Icon
             Icon(
                 imageVector = Icons.Default.Code,
                 contentDescription = null,
-                tint = ElectricTeal,
-                modifier = Modifier
-                    .size(96.dp)
-                    .padding(bottom = 16.dp)
+                tint = SlateBlue,
+                modifier = Modifier.size(80.dp)
             )
 
-            // Title
+            // App Brand Name
             Text(
-                text = stringResource(id = R.string.welcome_title),
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 36.sp,
-                    letterSpacing = 1.sp
-                ),
-                color = Color.White
-            )
-
-            // Subtitle
-            Text(
-                text = stringResource(id = R.string.welcome_subtitle),
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Medium
-                ),
-                color = ElectricTeal,
-                modifier = Modifier.padding(top = 8.dp),
+                text = "PocketCodeAgent 👁️",
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 32.sp,
+                color = TextPrimary,
                 textAlign = TextAlign.Center
             )
 
-            // Description
+            // Core pitch line
             Text(
-                text = stringResource(id = R.string.welcome_description),
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color(0xFFB1ABC9),
-                modifier = Modifier.padding(top = 24.dp, bottom = 32.dp),
+                text = "Mobile Coding Agent für Android ohne Root",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp,
+                color = CalmSage,
                 textAlign = TextAlign.Center
             )
 
-            // Highlight Cards
-            FeatureCard(
-                icon = Icons.Default.Security,
-                title = "Local Keystore Encryption",
-                description = "All API keys are securely stored and encrypted locally via Android Keystore system. Never shared with anyone."
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Feature bullet list using cards
+            WelcomeFeatureRow(
+                icon = Icons.Default.Lock,
+                title = "API-Keys lokal speichern",
+                description = "Hardware-verschlüsselt über den Android Keystore."
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            FeatureCard(
-                icon = Icons.Default.Terminal,
-                title = "Multi-Agent System",
-                description = "Run specialized agents to Plan, Code, Review, and Execute tasks. Safe terminal executions require your approval."
+            WelcomeFeatureRow(
+                icon = Icons.Default.FolderOpen,
+                title = "Projekte öffnen",
+                description = "Dateien im Handy-Speicher über das offizielle SAF verwalten."
             )
 
-            Spacer(modifier = Modifier.height(48.dp))
+            WelcomeFeatureRow(
+                icon = Icons.Default.Psychology,
+                title = "Planen, coden, reviewen & fixen",
+                description = "Spezialisierte Agenten arbeiten Schritt-für-Schritt."
+            )
 
-            // Get Started Button
-            Button(
-                onClick = onGetStartedClick,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = NeonPurple
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
+            WelcomeFeatureRow(
+                icon = Icons.Default.Web,
+                title = "Preview & Termux-Bridge",
+                description = "Ergebnisse direkt ansehen und Node-Server ansteuern."
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Bottom Buttons
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = stringResource(id = R.string.get_started),
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
+                // Setup / Get Started Button
+                Button(
+                    onClick = onGetStartedClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = "Jetzt einrichten 🚀",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
                     )
-                )
+                }
+
+                // Demo Mode Button (no API-keys required)
+                OutlinedButton(
+                    onClick = onStartDemoModeClick,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = CalmSage),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = "Demo-Modus starten (Ohne Key) 🧪",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
 
 @Composable
-fun FeatureCard(icon: ImageVector, title: String, description: String) {
+fun WelcomeFeatureRow(icon: ImageVector, title: String, description: String) {
     Card(
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E1A33).copy(alpha = 0.5f)
-        ),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E22)),
+        shape = RoundedCornerShape(8.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = GlowPink,
-                modifier = Modifier.size(32.dp)
+                tint = SlateBlue,
+                modifier = Modifier.size(24.dp)
             )
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(14.dp))
             Column {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = TextPrimary
                 )
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF9E98B5)
+                    color = TextSecondary
                 )
             }
         }

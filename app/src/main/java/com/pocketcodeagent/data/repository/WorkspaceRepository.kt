@@ -22,14 +22,23 @@ class WorkspaceRepository(val context: Context) {
     val workspace: DocumentFileWorkspace = DocumentFileWorkspaceImpl(context)
 
     fun persistWorkspacePermission(uri: Uri) {
+        if (uri.toString().startsWith("demo://")) return
         WorkspaceManager.takePersistableUriPermission(context, uri)
     }
 
     fun loadWorkspaceFiles(rootUri: Uri): List<WorkspaceFile> {
+        if (rootUri.toString().startsWith("demo://")) {
+            workspace.setRootUri(rootUri.toString())
+            return workspace.listFiles()
+        }
         return WorkspaceManager.listFilesRecursive(context, rootUri)
     }
 
     fun readFile(fileUriString: String): String {
+        if (fileUriString.startsWith("demo://")) {
+            val relativePath = fileUriString.removePrefix("demo://")
+            return workspace.readFile(relativePath) ?: ""
+        }
         return try {
             WorkspaceManager.readFileContent(context, Uri.parse(fileUriString))
         } catch (e: Exception) {
@@ -38,6 +47,10 @@ class WorkspaceRepository(val context: Context) {
     }
 
     fun writeFile(fileUriString: String, content: String): Boolean {
+        if (fileUriString.startsWith("demo://")) {
+            val relativePath = fileUriString.removePrefix("demo://")
+            return workspace.writeFile(relativePath, content)
+        }
         return try {
             WorkspaceManager.writeFileContent(context, Uri.parse(fileUriString), content)
         } catch (e: Exception) {
@@ -46,6 +59,9 @@ class WorkspaceRepository(val context: Context) {
     }
 
     fun createFile(parentUriString: String, mimeType: String, fileName: String): Uri? {
+        if (parentUriString.startsWith("demo://")) {
+            return Uri.parse("demo://$fileName")
+        }
         return try {
             WorkspaceManager.createFile(context, Uri.parse(parentUriString), mimeType, fileName)
         } catch (e: Exception) {
@@ -54,6 +70,9 @@ class WorkspaceRepository(val context: Context) {
     }
 
     fun createDirectory(parentUriString: String, dirName: String): Uri? {
+        if (parentUriString.startsWith("demo://")) {
+            return Uri.parse("demo://$dirName")
+        }
         return try {
             WorkspaceManager.createDirectory(context, Uri.parse(parentUriString), dirName)
         } catch (e: Exception) {
@@ -62,6 +81,10 @@ class WorkspaceRepository(val context: Context) {
     }
 
     fun deleteFile(fileUriString: String): Boolean {
+        if (fileUriString.startsWith("demo://")) {
+            val relativePath = fileUriString.removePrefix("demo://")
+            return workspace.deleteFile(relativePath)
+        }
         return try {
             WorkspaceManager.deleteFile(context, Uri.parse(fileUriString))
         } catch (e: Exception) {
@@ -70,12 +93,18 @@ class WorkspaceRepository(val context: Context) {
     }
 
     fun getFileUriByRelativePath(rootUriString: String, relativePath: String): Uri? {
+        if (rootUriString.startsWith("demo://")) {
+            return Uri.parse("demo://$relativePath")
+        }
         val rootUri = Uri.parse(rootUriString)
         val docFile = WorkspaceManager.findFileOrDirByRelativePath(context, rootUri, relativePath)
         return docFile?.uri
     }
 
     fun createOrGetFileUriByRelativePath(rootUriString: String, relativePath: String): Uri? {
+        if (rootUriString.startsWith("demo://")) {
+            return Uri.parse("demo://$relativePath")
+        }
         val rootUri = Uri.parse(rootUriString)
         return WorkspaceManager.createOrGetFileByRelativePath(context, rootUri, relativePath)
     }

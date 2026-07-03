@@ -55,7 +55,20 @@ class MainActivity : ComponentActivity() {
                 // Render screens based on current state
                 when (mainViewModel.currentScreen) {
                     "welcome" -> WelcomeScreen(
-                        onGetStartedClick = { mainViewModel.navigateTo("providers") }
+                        onGetStartedClick = { mainViewModel.navigateTo("providers") },
+                        onStartDemoModeClick = {
+                            val demoProvider = com.pocketcodeagent.data.model.Provider(
+                                id = 999,
+                                name = "Demo Provider (Simuliert)",
+                                baseUrl = "http://localhost",
+                                apiKey = "demo",
+                                modelName = "demo-model"
+                            )
+                            mainViewModel.selectedProvider = demoProvider
+                            mainViewModel.selectWorkspace("demo://workspace", "Demo Workspace")
+                            workspaceViewModel.repository.workspace.setRootUri("demo://workspace")
+                            mainViewModel.navigateTo("dashboard")
+                        }
                     )
 
                     "providers" -> ProviderSetupScreen(
