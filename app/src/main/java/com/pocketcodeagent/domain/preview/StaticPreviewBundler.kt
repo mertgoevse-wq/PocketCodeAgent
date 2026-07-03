@@ -4,6 +4,11 @@ import android.content.Context
 import android.net.Uri
 import com.pocketcodeagent.data.local.DocumentFileWorkspace
 import com.pocketcodeagent.data.local.WorkspaceManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+private const val MAX_HTML_SIZE_BYTES = 500_000L  // 500 KB
+private const val MAX_ASSET_SIZE_BYTES = 500_000L // 500 KB
 
 data class StaticPreviewResult(
     val html: String,
@@ -16,11 +21,11 @@ data class StaticPreviewResult(
 
 class StaticPreviewBundler(private val context: Context) {
 
-    fun bundleFromWorkspace(
+    suspend fun bundleFromWorkspace(
         workspace: DocumentFileWorkspace,
         rootUriString: String,
         startFileName: String? = null
-    ): StaticPreviewResult {
+    ): StaticPreviewResult = withContext(Dispatchers.IO) {
         val warnings = mutableListOf<String>()
         val errors = mutableListOf<String>()
         val loadedCss = mutableListOf<String>()
@@ -32,7 +37,7 @@ class StaticPreviewBundler(private val context: Context) {
             startFileName
         } else {
             findIndexHtml(workspace, rootUriString) ?: run {
-                return StaticPreviewResult(
+                return@withContext StaticPreviewResult(
                     html = "<html><body><h3 style='color:#888;text-align:center;padding-top:100px;font-family:sans-serif;'>Keine index.html im Workspace gefunden.</h3></body></html>",
                     sourcePath = "",
                     errors = listOf("Keine index.html gefunden. Getestet: index.html, public/index.html, src/index.html")
@@ -42,18 +47,25 @@ class StaticPreviewBundler(private val context: Context) {
 
         val rawHtml = workspace.readFile(indexPath)
         if (rawHtml == null) {
-            return StaticPreviewResult(
+            return@withContext StaticPreviewResult(
                 html = "<html><body><h3 style='color:#888;text-align:center;padding-top:100px;font-family:sans-serif;'>Datei nicht lesbar: $indexPath</h3></body></html>",
                 sourcePath = indexPath,
                 errors = listOf("Konnte $indexPath nicht lesen.")
             )
         }
 
+        // Large HTML check
+        val htmlSize = rawHtml.encodeToByteArray().size.toLong()
+        if (htmlSize > MAX_HTML_SIZE_BYTES) {
+            val sizeKB = htmlSize / 1024
+            warnings.add("HTML-Datei ist ${sizeKB}KB (Limit: ${MAX_HTML_SIZE_BYTES / 1024}KB). Bundling wurde ohne Inline-Assets durchgefuehrt.")
+        }
+
         val baseDir = indexPath.substringBeforeLast("/", "")
 
         val bundled = bundleHtml(rawHtml, baseDir, workspace, rootUri, rootUriString, warnings, errors, loadedCss, loadedJs)
 
-        return StaticPreviewResult(
+        return@withContext StaticPreviewResult(
             html = bundled,
             sourcePath = indexPath,
             warnings = warnings,
@@ -80,7 +92,7 @@ class StaticPreviewBundler(private val context: Context) {
         return null
     }
 
-    private fun bundleHtml(
+    private suspend fun bundleHtml(
         rawHtml: String,
         baseDir: String,
         workspace: DocumentFileWorkspace,
@@ -90,16 +102,16 @@ class StaticPreviewBundler(private val context: Context) {
         errors: MutableList<String>,
         loadedCss: MutableList<String>,
         loadedJs: MutableList<String>
-    ): String {
+    ): String = withContext(Dispatchers.IO) {
         var result = rawHtml
 
         result = replaceCssLinks(result, baseDir, workspace, rootUri, rootUriString, warnings, errors, loadedCss)
         result = replaceJsScripts(result, baseDir, workspace, rootUri, rootUriString, warnings, errors, loadedJs)
 
-        return result
+        result
     }
 
-    private fun replaceCssLinks(
+    private suspend fun replaceCssLinks(
         html: String,
         baseDir: String,
         workspace: DocumentFileWorkspace,
@@ -120,42 +132,49 @@ class StaticPreviewBundler(private val context: Context) {
         var result = html
         result = linkRegexHrefFirst.replace(result) { match ->
             val href = match.groupValues[1]
-            val resolved = resolvePath(href, baseDir)
-            if (resolved == null) {
-                warnings.add("CSS (extern): $href (externe URL — unverändert)")
-                match.value
-            } else {
-                val cssContent = readFileSafe(resolved, workspace, rootUri, rootUriString)
-                if (cssContent != null) {
-                    loadedCss.add(resolved)
-                    "<style>/* bundled: $resolved */\n$cssContent\n</style>"
-                } else {
-                    warnings.add("CSS nicht lesbar: $resolved — Link bleibt erhalten")
-                    match.value
-                }
-            }
+            processLinkMatch(match, href, baseDir, workspace, rootUri, rootUriString, warnings, loadedCss)
         }
         result = linkRegexRelFirst.replace(result) { match ->
             val href = match.groupValues[1]
-            val resolved = resolvePath(href, baseDir)
-            if (resolved == null) {
-                warnings.add("CSS (extern): $href (externe URL — unverändert)")
-                match.value
-            } else {
-                val cssContent = readFileSafe(resolved, workspace, rootUri, rootUriString)
-                if (cssContent != null) {
-                    loadedCss.add(resolved)
-                    "<style>/* bundled: $resolved */\n$cssContent\n</style>"
-                } else {
-                    warnings.add("CSS nicht lesbar: $resolved — Link bleibt erhalten")
-                    match.value
-                }
-            }
+            processLinkMatch(match, href, baseDir, workspace, rootUri, rootUriString, warnings, loadedCss)
         }
         return result
     }
 
-    private fun replaceJsScripts(
+    private fun processLinkMatch(
+        match: MatchResult,
+        href: String,
+        baseDir: String,
+        workspace: DocumentFileWorkspace,
+        rootUri: Uri,
+        rootUriString: String,
+        warnings: MutableList<String>,
+        loadedCss: MutableList<String>
+    ): String {
+        val resolved = resolvePath(href, baseDir)
+        if (resolved == null) {
+            warnings.add("CSS (extern): $href (externe URL — unveraendert)")
+            return match.value
+        }
+        val cssContent = readFileWithSizeCheck(resolved, workspace, rootUri, rootUriString)
+        return when {
+            cssContent == null -> {
+                warnings.add("CSS nicht lesbar: $resolved — Link bleibt erhalten")
+                match.value
+            }
+            cssContent == "TOO_LARGE" -> {
+                val sizeKB = MAX_ASSET_SIZE_BYTES / 1024
+                warnings.add("CSS ueberschreitet ${sizeKB}KB-Limit: $resolved — nicht inline gebundled")
+                match.value
+            }
+            else -> {
+                loadedCss.add(resolved)
+                "<style>/* bundled: $resolved */\n$cssContent\n</style>"
+            }
+        }
+    }
+
+    private suspend fun replaceJsScripts(
         html: String,
         baseDir: String,
         workspace: DocumentFileWorkspace,
@@ -175,19 +194,27 @@ class StaticPreviewBundler(private val context: Context) {
 
             if (resolved == null) {
                 if (src.startsWith("http://") || src.startsWith("https://")) {
-                    warnings.add("JS (extern): $src (externe URL — unverändert)")
+                    warnings.add("JS (extern): $src (externe URL — unveraendert)")
                 } else {
                     warnings.add("JS blockiert: $src (unsicherer Pfad)")
                 }
                 match.value
             } else {
-                val jsContent = readFileSafe(resolved, workspace, rootUri, rootUriString)
-                if (jsContent != null) {
-                    loadedJs.add(resolved)
-                    "<script>/* bundled: $resolved */\n$jsContent\n</script>"
-                } else {
-                    warnings.add("JS nicht lesbar: $resolved — Link bleibt erhalten")
-                    match.value
+                val jsContent = readFileWithSizeCheck(resolved, workspace, rootUri, rootUriString)
+                when {
+                    jsContent == null -> {
+                        warnings.add("JS nicht lesbar: $resolved — Link bleibt erhalten")
+                        match.value
+                    }
+                    jsContent == "TOO_LARGE" -> {
+                        val sizeKB = MAX_ASSET_SIZE_BYTES / 1024
+                        warnings.add("JS ueberschreitet ${sizeKB}KB-Limit: $resolved — nicht inline gebundled")
+                        match.value
+                    }
+                    else -> {
+                        loadedJs.add(resolved)
+                        "<script>/* bundled: $resolved */\n$jsContent\n</script>"
+                    }
                 }
             }
         }
@@ -209,19 +236,42 @@ class StaticPreviewBundler(private val context: Context) {
         return if (baseDir.isEmpty()) cleaned else "$baseDir/$cleaned"
     }
 
-    private fun readFileSafe(
+    /**
+     * Reads a file safely. Returns:
+     * - content string if file is readable and within limits
+     * - "TOO_LARGE" if file exceeds MAX_ASSET_SIZE_BYTES
+     * - null if file doesn't exist or can't be read
+     */
+    private fun readFileWithSizeCheck(
         relativePath: String,
         workspace: DocumentFileWorkspace,
         rootUri: Uri,
         rootUriString: String
     ): String? {
+        // Try workspace first
         if (workspace.exists(relativePath) && !workspace.isDirectory(relativePath)) {
-            return workspace.readFile(relativePath)
+            val content = workspace.readFile(relativePath)
+            if (content != null) {
+                val size = content.encodeToByteArray().size.toLong()
+                if (size > MAX_ASSET_SIZE_BYTES) {
+                    return "TOO_LARGE"
+                }
+                return content
+            }
+            return null
         }
+        // Try SAF fallback
         val doc = WorkspaceManager.findFileOrDirByRelativePath(context, rootUri, relativePath)
         if (doc != null && doc.isFile) {
             return try {
-                WorkspaceManager.readFileContent(context, doc.uri)
+                val content = WorkspaceManager.readFileContent(context, doc.uri)
+                if (content != null) {
+                    val size = content.encodeToByteArray().size.toLong()
+                    if (size > MAX_ASSET_SIZE_BYTES) {
+                        return "TOO_LARGE"
+                    }
+                }
+                content
             } catch (e: Exception) {
                 null
             }

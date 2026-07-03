@@ -51,6 +51,9 @@ class MainViewModel : ViewModel() {
     var queuedCommandActions by mutableStateOf<List<AgentAction.RunCommand>>(emptyList())
     var activePreviewTarget by mutableStateOf<PreviewTarget>(PreviewTarget.None)
 
+    // Workspace preview ready hint (set when index.html is created/modified via diff apply)
+    var workspacePreviewReady by mutableStateOf(false)
+
     fun setPreviewTarget(target: PreviewTarget) {
         activePreviewTarget = target
         openPreview()
@@ -146,6 +149,11 @@ class MainViewModel : ViewModel() {
 
         pendingFileChanges = (pendingFileChanges.filterNot { it.path == patch.path } + patch)
         currentDiffFileIndex = 0
+
+        // Detect index.html creation/modification for preview ready hint
+        if (patch.path.contains("index.html", ignoreCase = true)) {
+            workspacePreviewReady = true
+        }
     }
 
     fun addCommandAction(action: AgentAction.RunCommand) {

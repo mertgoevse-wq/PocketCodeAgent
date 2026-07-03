@@ -249,6 +249,8 @@ fun MainShellScreen(
                     previewTarget = mainViewModel.activePreviewTarget,
                     onTargetChanged = { mainViewModel.setPreviewTarget(it) },
                     repository = workspaceViewModel.repository,
+                    workspacePreviewReady = mainViewModel.workspacePreviewReady,
+                    onPreviewReadyConsumed = { mainViewModel.workspacePreviewReady = false },
                     modifier = Modifier.fillMaxSize()
                 )
 

@@ -36,9 +36,20 @@ import com.pocketcodeagent.domain.preview.StaticPreviewResult
 import com.pocketcodeagent.data.repository.WorkspaceRepository
 import com.pocketcodeagent.ui.theme.*
 import com.pocketcodeagent.ui.viewmodel.WorkspaceViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val MAX_CONSOLE_LOGS = 200
 private const val DEFAULT_DEV_URL = "http://127.0.0.1:5173"
+
+// Secrets-Patterns fuer Console-Log-Sanitization
+private val SECRET_PATTERNS = listOf(
+    Regex("""(?i)bearer\s+[A-Za-z0-9._\-]{20,}""") to "Bearer [redacted]",
+    Regex("""(?i)sk-[A-Za-z0-9]{20,}""") to "sk-[redacted]",
+    Regex("""(?i)nvapi-[A-Za-z0-9]{20,}""") to "nvapi-[redacted]",
+    Regex("""(?i)(api[_-]?key|apikey|api_secret|token|secret|password|authorization)\s*[:=]\s*[^\s,;)]{8,}""") to "$1=[redacted]"
+)
 
 enum class PreviewMode { WORKSPACE, FILE, URL }
 
@@ -49,6 +60,8 @@ fun PreviewPanel(
     previewTarget: PreviewTarget,
     onTargetChanged: (PreviewTarget) -> Unit,
     repository: WorkspaceRepository,
+    workspacePreviewReady: Boolean = false,
+    onPreviewReadyConsumed: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = repository.context
@@ -69,12 +82,27 @@ fun PreviewPanel(
     var bundleResult by remember { mutableStateOf<StaticPreviewResult?>(null) }
     var isBundling by remember { mutableStateOf(false) }
 
+    // Workspace preview ready hint (set by MainViewModel after diff apply)
+    var showPreviewReadyHint by remember { mutableStateOf(false) }
+
+    // Sync from MainViewModel workspacePreviewReady state
+    LaunchedEffect(workspacePreviewReady) {
+        if (workspacePreviewReady) {
+            showPreviewReadyHint = true
+            onPreviewReadyConsumed()
+        }
+    }
+
+    // Remember scope for coroutines
+    val scope = rememberCoroutineScope()
+
     // React to previewTarget changes
     LaunchedEffect(previewTarget) {
         when (previewTarget) {
             is PreviewTarget.WorkspaceStatic -> {
                 previewMode = PreviewMode.WORKSPACE
-                loadWorkspaceBundle(workspaceUriString, bundler, repository) { result ->
+                showPreviewReadyHint = false
+                loadWorkspaceBundleAsync(scope, workspaceUriString, bundler, repository) { result ->
                     bundleResult = result
                     webViewRef?.loadDataWithBaseURL(null, result.html, "text/html", "UTF-8", null)
                     lastReloadTime = System.currentTimeMillis()
@@ -82,7 +110,7 @@ fun PreviewPanel(
             }
             is PreviewTarget.File -> {
                 previewMode = PreviewMode.FILE
-                loadWorkspaceBundle(workspaceUriString, bundler, repository, previewTarget.path) { result ->
+                loadWorkspaceBundleAsync(scope, workspaceUriString, bundler, repository, previewTarget.path) { result ->
                     bundleResult = result
                     webViewRef?.loadDataWithBaseURL(null, result.html, "text/html", "UTF-8", null)
                     lastReloadTime = System.currentTimeMillis()
@@ -104,7 +132,7 @@ fun PreviewPanel(
             webError = null
             when (previewMode) {
                 PreviewMode.WORKSPACE -> {
-                    loadWorkspaceBundle(workspaceUriString, bundler, repository) { result ->
+                    loadWorkspaceBundleAsync(scope, workspaceUriString, bundler, repository) { result ->
                         bundleResult = result
                         webViewRef?.loadDataWithBaseURL(null, result.html, "text/html", "UTF-8", null)
                         lastReloadTime = System.currentTimeMillis()
@@ -112,7 +140,7 @@ fun PreviewPanel(
                 }
                 PreviewMode.FILE -> {
                     bundleResult?.let { br ->
-                        loadWorkspaceBundle(workspaceUriString, bundler, repository, br.sourcePath) { result ->
+                        loadWorkspaceBundleAsync(scope, workspaceUriString, bundler, repository, br.sourcePath) { result ->
                             bundleResult = result
                             webViewRef?.loadDataWithBaseURL(null, result.html, "text/html", "UTF-8", null)
                             lastReloadTime = System.currentTimeMillis()
@@ -130,7 +158,7 @@ fun PreviewPanel(
         if (viewModel.lastFileWriteTimestamp > 0 && viewModel.lastFileWriteTimestamp != lastWriteTimestamp) {
             lastWriteTimestamp = viewModel.lastFileWriteTimestamp
             if (previewMode == PreviewMode.WORKSPACE || previewMode == PreviewMode.FILE) {
-                loadWorkspaceBundle(workspaceUriString, bundler, repository,
+                loadWorkspaceBundleAsync(scope, workspaceUriString, bundler, repository,
                     if (previewMode == PreviewMode.FILE) bundleResult?.sourcePath else null
                 ) { result ->
                     bundleResult = result
@@ -245,6 +273,30 @@ fun PreviewPanel(
             lastReloadTime = lastReloadTime
         )
 
+        // Workspace preview ready hint
+        AnimatedVisibility(visible = showPreviewReadyHint) {
+            Surface(color = SlateBlue.copy(alpha = 0.12f), modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.CheckCircle, null, tint = CalmSage, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Workspace preview ready", color = CalmSage, fontSize = 11.sp, fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f))
+                    TextButton(onClick = {
+                        showPreviewReadyHint = false
+                        onTargetChanged(PreviewTarget.WorkspaceStatic)
+                    }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)) {
+                        Text("Jetzt laden", color = SlateBlue, fontSize = 11.sp)
+                    }
+                    IconButton(onClick = { showPreviewReadyHint = false }, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.Close, null, tint = TextSecondary, modifier = Modifier.size(12.dp))
+                    }
+                }
+            }
+        }
+
         // Error banner
         webError?.let { err ->
             Surface(color = Color(0xFF240D0D), modifier = Modifier.fillMaxWidth()) {
@@ -288,9 +340,10 @@ fun PreviewPanel(
                     webChromeClient = object : WebChromeClient() {
                         override fun onConsoleMessage(msg: ConsoleMessage?): Boolean {
                             msg?.let {
-                                val entry = "[${it.messageLevel()}] ${it.message()}"
+                                val raw = "[${it.messageLevel()}] ${it.message()}"
+                                val sanitized = sanitizeConsoleLog(raw)
                                 if (consoleLogs.size >= MAX_CONSOLE_LOGS) consoleLogs.removeAt(0)
-                                consoleLogs.add(entry)
+                                consoleLogs.add(sanitized)
                             }
                             return true
                         }
@@ -311,7 +364,11 @@ fun PreviewPanel(
             onToggleTermux = { showTermux = !showTermux },
             consoleLogs = consoleLogs,
             bundleResult = bundleResult,
-            onClearLogs = { consoleLogs.clear() }
+            onClearLogs = { consoleLogs.clear() },
+            onCopyLogs = {
+                val sanitized = consoleLogs.joinToString("\n")
+                copyText(context, sanitized)
+            }
         )
     }
 }
@@ -383,9 +440,14 @@ private fun FileControls(
     Surface(color = Color(0xFF13131A), modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             bundleResult?.sourcePath?.let { path ->
-                Text("Preview: $path", color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                if (path.endsWith(".html", ignoreCase = true) || path.endsWith(".htm", ignoreCase = true)) {
+                    Text("Preview: $path", color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                } else {
+                    Text("Preview: $path", color = WarmCopper, fontSize = 11.sp)
+                    Text("Nur .html/.htm-Dateien werden unterstuetzt.", color = TextSecondary, fontSize = 10.sp)
+                }
                 Spacer(Modifier.height(6.dp))
-            } ?: Text("Keine HTML-Datei ausgewählt — öffne eine .html Datei im Editor oder Files-Tab.",
+            } ?: Text("Keine HTML-Datei ausgewaehlt — oeffne eine .html Datei im Editor.",
                 color = TextSecondary, fontSize = 11.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                 Button(
@@ -423,7 +485,8 @@ private fun UrlControls(
                         focusedBorderColor = SlateBlue,
                         unfocusedBorderColor = BorderGrey
                     ),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    textStyle = LocalTextStyle.current.copy(fontSize = 12.sp),
                     shape = RoundedCornerShape(8.dp)
                 )
                 Spacer(Modifier.width(8.dp))
@@ -498,7 +561,8 @@ private fun BottomPanels(
     onToggleTermux: () -> Unit,
     consoleLogs: List<String>,
     bundleResult: StaticPreviewResult?,
-    onClearLogs: () -> Unit
+    onClearLogs: () -> Unit,
+    onCopyLogs: () -> Unit
 ) {
     Column {
         // Panel toggle buttons
@@ -523,9 +587,14 @@ private fun BottomPanels(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("WebView Konsole (max $MAX_CONSOLE_LOGS)", color = Color(0xFF555560), fontSize = 10.sp)
-                        IconButton(onClick = onClearLogs, modifier = Modifier.size(20.dp)) {
-                            Icon(Icons.Default.Delete, null, tint = TextSecondary, modifier = Modifier.size(12.dp))
+                        Text("WebView Konsole (max $MAX_CONSOLE_LOGS, sanitized)", color = Color(0xFF555560), fontSize = 10.sp)
+                        Row {
+                            IconButton(onClick = onCopyLogs, modifier = Modifier.size(20.dp)) {
+                                Icon(Icons.Default.ContentCopy, null, tint = TextSecondary, modifier = Modifier.size(12.dp))
+                            }
+                            IconButton(onClick = onClearLogs, modifier = Modifier.size(20.dp)) {
+                                Icon(Icons.Default.Delete, null, tint = TextSecondary, modifier = Modifier.size(12.dp))
+                            }
                         }
                     }
                     LazyColumn(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
@@ -652,12 +721,21 @@ private fun TermuxCmd(command: String, onClick: () -> Unit) {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
+private fun sanitizeConsoleLog(log: String): String {
+    var sanitized = log
+    for ((pattern, replacement) in SECRET_PATTERNS) {
+        sanitized = pattern.replace(sanitized, replacement)
+    }
+    return sanitized
+}
+
 private fun copyText(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText("Termux", text))
 }
 
-private fun loadWorkspaceBundle(
+private fun loadWorkspaceBundleAsync(
+    scope: kotlinx.coroutines.CoroutineScope,
     workspaceUriString: String?,
     bundler: StaticPreviewBundler,
     repository: WorkspaceRepository,
@@ -666,11 +744,17 @@ private fun loadWorkspaceBundle(
 ) {
     if (workspaceUriString == null) {
         onResult(StaticPreviewResult(
-            html = "<html><body><h3 style='color:#888;text-align:center;padding-top:100px;font-family:sans-serif;'>Kein Workspace geöffnet</h3></body></html>",
-            sourcePath = "", errors = listOf("Kein Workspace ausgewählt.")))
+            html = "<html><body><h3 style='color:#888;text-align:center;padding-top:100px;font-family:sans-serif;'>Kein Workspace geoeffnet</h3></body></html>",
+            sourcePath = "", errors = listOf("Kein Workspace ausgewaehlt.")))
         return
     }
-    repository.workspace.setRootUri(workspaceUriString)
-    val result = bundler.bundleFromWorkspace(repository.workspace, workspaceUriString, startFileName)
-    onResult(result)
+    scope.launch {
+        val result = withContext(Dispatchers.IO) {
+            repository.workspace.setRootUri(workspaceUriString)
+            bundler.bundleFromWorkspace(repository.workspace, workspaceUriString, startFileName)
+        }
+        onResult(result)
+    }
 }
+
+
