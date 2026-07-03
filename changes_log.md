@@ -142,3 +142,17 @@
 - **HTTP Status Error Handler (`ApiClient.kt`)**:
   - Overrode network callback handlers to maps client errors into clear German status alerts (401 Unauthorized, 403 Forbidden, 404 Not Found, 429 Too Many Requests, 500 Internal Error, and SocketTimeoutException).
   - Added default settings for temperature (0.7) and max_tokens (2048) in streaming payloads.
+
+---
+
+### Expansion: WebView LivePreview Core & Connection Error Indicators
+
+- **Static Web Preview with Document Picking (`LivePreviewScreen.kt`)**:
+  - Implemented Static Web Preview mode (Modus A) loading `index.html` from SAF workspaces.
+  - Added a file picker allowing developers to select which specific HTML file in their workspace directory serves as the root document.
+  - Enabled support for relative files, Javascript, and DOM storage with custom toggle settings.
+
+- **Local Server Preview with Connection State Monitors (`LivePreviewScreen.kt`)**:
+  - Implemented Local Server Mode (Modus B) default-binding to `http://127.0.0.1:5173`.
+  - Configured error layout overlays catching browser timeouts and server unreachable states.
+  - Rendered Termux setup instruction cards with quick clipboard-copy shortcuts.
