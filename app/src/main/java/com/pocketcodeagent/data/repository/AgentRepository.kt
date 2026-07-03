@@ -4,6 +4,7 @@ import com.pocketcodeagent.data.model.AgentRole
 import com.pocketcodeagent.data.model.ChatMessage
 import com.pocketcodeagent.data.model.ProposedFileChange
 import com.pocketcodeagent.data.model.Provider
+import com.pocketcodeagent.data.model.WorkspaceFile
 import com.pocketcodeagent.data.network.ApiClient
 import kotlinx.coroutines.flow.flow
 import java.util.regex.Pattern

@@ -56,6 +56,9 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
+    // DocumentFile for SAF
+    implementation("androidx.documentfile:documentfile:1.0.1")
+
     // Navigation Compose
     implementation(libs.androidx.navigation.compose)
 

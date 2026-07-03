@@ -2,6 +2,7 @@ package com.pocketcodeagent.data.repository
 
 import android.content.Context
 import android.net.Uri
+import androidx.documentfile.provider.DocumentFile
 import com.pocketcodeagent.data.local.WorkspaceManager
 import com.pocketcodeagent.data.model.WorkspaceFile
 

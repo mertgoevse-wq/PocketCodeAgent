@@ -14,7 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class WorkspaceViewModel(private val repository: WorkspaceRepository) : ViewModel() {
+class WorkspaceViewModel(val repository: WorkspaceRepository) : ViewModel() {
 
     var files by mutableStateOf<List<WorkspaceFile>>(emptyList())
     var isLoadingFiles by mutableStateOf(false)

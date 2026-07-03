@@ -195,7 +195,7 @@ fun TerminalScreen(
                         focusedBorderColor = NeonPurple
                     ),
                     modifier = Modifier.weight(1f),
-                    fontFamily = FontFamily.Monospace,
+                    textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace),
                     shape = RoundedCornerShape(8.dp)
                 )
 
