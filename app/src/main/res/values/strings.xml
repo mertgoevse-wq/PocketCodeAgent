@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCodeAgent</string>
+    <string name="welcome_title">PocketCodeAgent</string>
+    <string name="welcome_subtitle">Your AI Coding Companion directly on Android</string>
+    <string name="welcome_description">A mobile-first developer environment powered by autonomous AI agents. Write, edit, review, and test projects anywhere without root privileges.</string>
+    <string name="get_started">Get Started</string>
+    <string name="provider_setup_title">API Provider Setup</string>
+    <string name="workspace_picker_title">Select Workspace</string>
+    <string name="dashboard_title">Dashboard</string>
+    <string name="chat_agent_title">AI Agents Chat</string>
+    <string name="file_explorer_title">File Explorer</string>
+    <string name="code_editor_title">Code Editor</string>
+    <string name="diff_review_title">Diff Review</string>
+    <string name="terminal_title">Terminal Bridge</string>
+    <string name="live_preview_title">Live Web Preview</string>
+    <string name="settings_title">Settings</string>
+    <string name="logs_title">System &amp; Agent Logs</string>
+</resources>
