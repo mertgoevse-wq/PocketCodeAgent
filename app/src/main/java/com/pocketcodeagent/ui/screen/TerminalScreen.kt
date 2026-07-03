@@ -1,5 +1,10 @@
 package com.pocketcodeagent.ui.screen
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -7,13 +12,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -29,14 +37,70 @@ fun TerminalScreen(
     viewModel: AgentViewModel,
     onBackClick: () -> Unit
 ) {
+    val context = LocalContext.current
     val recommended = viewModel.recommendedCommands
     val executed = viewModel.executedCommands
     var manualCommand by remember { mutableStateOf("") }
 
+    // Dialog state for confirming execution
+    var commandToConfirm by remember { mutableStateOf<String?>(null) }
+    var warningMessage by remember { mutableStateOf<String?>(null) }
+
+    // Check if Termux is installed on the system
+    val isTermuxInstalled = remember {
+        try {
+            context.packageManager.getPackageInfo("com.termux", 0)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    // Helper function to check for dangerous commands
+    fun getDangerousWarning(command: String): String? {
+        val cmdLower = command.lowercase().trim()
+        if (cmdLower.contains("rm -rf") || cmdLower.contains("rm -r")) {
+            return "⚠️ GEFAHR: Dieser Befehl löscht Verzeichnisse rekursiv und unwiderruflich!"
+        }
+        if (cmdLower.contains("chmod 777")) {
+            return "⚠️ GEFAHR: Setzt maximale Berechtigungen (777). Dies ist ein Sicherheitsrisiko!"
+        }
+        if (cmdLower.contains("curl") && (cmdLower.contains("| sh") || cmdLower.contains("| bash"))) {
+            return "⚠️ GEFAHR: Lädt ein externes Skript herunter und führt es sofort aus (Remote Code Execution)!"
+        }
+        if (cmdLower.contains("sudo")) {
+            return "ℹ️ INFO: Android Sandbox blockiert Root-Befehle. 'sudo' wird fehlschlagen."
+        }
+        return null
+    }
+
+    // Helper function to copy to clipboard
+    fun copyToClipboard(text: String) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("terminal_command", text)
+        clipboard.setPrimaryClip(clip)
+        Toast.makeText(context, "Befehl kopiert! 📋", Toast.LENGTH_SHORT).show()
+    }
+
+    // Helper function to open Termux
+    fun openTermux() {
+        try {
+            val intent = context.packageManager.getLaunchIntentForPackage("com.termux")
+            if (intent != null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            } else {
+                Toast.makeText(context, "Termux App nicht installiert! 📱", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(context, "Fehler beim Öffnen von Termux: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Terminal Bridge", color = Color.White) },
+                title = { Text("Terminal Bridge 💻", color = Color.White, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
@@ -53,30 +117,53 @@ fun TerminalScreen(
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
-            // Termux Bridge Guide
+            // Termux Bridge Status Card
             Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1A33)),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isTermuxInstalled) Color(0xFF1E3A24) else Color(0xFF331E1E)
+                ),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 16.dp)
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(imageVector = Icons.Default.Terminal, contentDescription = null, tint = ElectricTeal)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            "Termux Bridge Status: Configured",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(imageVector = Icons.Default.Terminal, contentDescription = null, tint = ElectricTeal)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (isTermuxInstalled) "Status: Termux installiert ✅" else "Status: Termux nicht installiert ⚠️",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        
+                        if (isTermuxInstalled) {
+                            Button(
+                                onClick = { openTermux() },
+                                colors = ButtonDefaults.buttonColors(containerColor = ElectricTeal),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("Öffnen", color = Color(0xFF0C0A14), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "Because Android sandboxes prevent running node.js or servers directly, React/Vite builds should be executed in Termux. PocketCodeAgent communicates commands via intent. Set up Termux-tasker or copy commands to execute them locally.",
+                        text = if (isTermuxInstalled) {
+                            "Termux wurde auf deinem Android-Gerät erkannt. PocketCodeAgent führt Befehle in einer isolierten App-Sandbox aus; kopiere empfohlene Befehle und führe sie in Termux aus."
+                        } else {
+                            "Termux wurde nicht gefunden. Für npm, Node-Dienste und Server-Previews installiere Termux über F-Droid oder GitHub."
+                        },
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF9E98B5),
+                        color = Color(0xFFD6D0EB),
                         fontSize = 11.sp
                     )
                 }
@@ -85,7 +172,7 @@ fun TerminalScreen(
             // Recommended Commands (Needs Approval)
             if (recommended.isNotEmpty()) {
                 Text(
-                    "Recommended by Agent (Requires Approval):",
+                    text = "Befehlsvorschläge vom Agenten (Bestätigung nötig):",
                     style = MaterialTheme.typography.titleSmall,
                     color = GlowPink,
                     fontWeight = FontWeight.Bold,
@@ -95,7 +182,7 @@ fun TerminalScreen(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 200.dp)
+                        .heightIn(max = 160.dp)
                         .padding(bottom = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -119,16 +206,38 @@ fun TerminalScreen(
                                     modifier = Modifier.weight(1f)
                                 )
 
-                                Row {
-                                    TextButton(onClick = { viewModel.rejectTerminalCommand(cmd) }) {
-                                        Text("Reject", color = Color.Red, fontSize = 12.sp)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    // Copy shortcut
+                                    IconButton(
+                                        onClick = { copyToClipboard(cmd) },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ContentCopy,
+                                            contentDescription = "Copy",
+                                            tint = ElectricTeal,
+                                            modifier = Modifier.size(16.dp)
+                                        )
                                     }
+
+                                    Spacer(modifier = Modifier.width(4.dp))
+
+                                    TextButton(
+                                        onClick = { viewModel.rejectTerminalCommand(cmd) },
+                                        contentPadding = PaddingValues(horizontal = 4.dp)
+                                    ) {
+                                        Text("Reject", color = Color.Red, fontSize = 11.sp)
+                                    }
+
                                     Button(
-                                        onClick = { viewModel.executeTerminalCommand(cmd) },
+                                        onClick = {
+                                            warningMessage = getDangerousWarning(cmd)
+                                            commandToConfirm = cmd
+                                        },
                                         colors = ButtonDefaults.buttonColors(containerColor = ElectricTeal),
                                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                     ) {
-                                        Text("Approve", color = Color(0xFF0C0A14), fontSize = 11.sp)
+                                        Text("Run", color = Color(0xFF0C0A14), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -139,7 +248,7 @@ fun TerminalScreen(
 
             // Executed Console Log
             Text(
-                "Terminal Console Output:",
+                text = "Terminal Verlauf & Ausgabe:",
                 style = MaterialTheme.typography.titleSmall,
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
@@ -156,23 +265,43 @@ fun TerminalScreen(
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     if (executed.isEmpty()) {
                         item {
-                            Text("Console is idle. No commands executed yet.", color = Color.DarkGray, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                            Text("Verlauf ist leer. Keine Befehle ausgeführt.", color = Color.DarkGray, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
                         }
                     } else {
                         items(executed) { cmd ->
-                            Text(
-                                text = "> $cmd",
-                                color = ElectricTeal,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 12.sp
-                            )
-                            Text(
-                                text = "Command executed successfully in environment.\nTask output: Done (mocked runtime)",
-                                color = Color.LightGray,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                modifier = Modifier.padding(start = 12.dp, bottom = 8.dp)
-                            )
+                            Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "> $cmd",
+                                        color = ElectricTeal,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 12.sp,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    IconButton(
+                                        onClick = { copyToClipboard(cmd) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ContentCopy,
+                                            contentDescription = "Copy",
+                                            tint = Color.Gray,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = "Befehlsausführung simuliert in Sandbox.\nAusgabe: Done (Ergebnis in Termux prüfen)",
+                                    color = Color.LightGray,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(start = 12.dp, top = 2.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -188,7 +317,7 @@ fun TerminalScreen(
                 OutlinedTextField(
                     value = manualCommand,
                     onValueChange = { manualCommand = it },
-                    placeholder = { Text("Type command...", color = Color.Gray) },
+                    placeholder = { Text("Eigener Befehl...", color = Color.Gray) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color.White,
@@ -204,8 +333,8 @@ fun TerminalScreen(
                 IconButton(
                     onClick = {
                         if (manualCommand.isNotEmpty()) {
-                            viewModel.executeTerminalCommand(manualCommand)
-                            manualCommand = ""
+                            warningMessage = getDangerousWarning(manualCommand)
+                            commandToConfirm = manualCommand
                         }
                     },
                     modifier = Modifier
@@ -215,5 +344,89 @@ fun TerminalScreen(
                 }
             }
         }
+    }
+
+    // Confirmation Dialog for Command Execution
+    if (commandToConfirm != null) {
+        AlertDialog(
+            onDismissRequest = { 
+                commandToConfirm = null 
+                warningMessage = null
+            },
+            title = { Text("Befehlsausführung bestätigen ⚠️") },
+            text = {
+                Column {
+                    Text("Möchtest du folgenden Befehl ausführen/kopieren?")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = commandToConfirm!!,
+                        color = Color.White,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.Black)
+                            .padding(8.dp)
+                    )
+                    
+                    // Show warning warning if dangerous
+                    warningMessage?.let { warn ->
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color.Red.copy(alpha = 0.2f))
+                                .padding(8.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Warning, contentDescription = "Warning", tint = Color.Red)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = warn, color = Color(0xFFFF8888), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val cmd = commandToConfirm!!
+                        // Copy to clipboard
+                        copyToClipboard(cmd)
+                        // Log simulated execution
+                        viewModel.executeTerminalCommand(cmd)
+                        
+                        // Clear input
+                        if (cmd == manualCommand) {
+                            manualCommand = ""
+                        }
+                        
+                        // Open Termux automatically to let user paste it
+                        if (isTermuxInstalled) {
+                            openTermux()
+                        }
+                        
+                        commandToConfirm = null
+                        warningMessage = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ElectricTeal)
+                ) {
+                    Text(
+                        text = if (isTermuxInstalled) "Kopieren & Termux öffnen" else "Befehl kopieren",
+                        color = Color(0xFF0C0A14),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { 
+                        commandToConfirm = null 
+                        warningMessage = null
+                    }
+                ) {
+                    Text("Abbrechen", color = Color.LightGray)
+                }
+            }
+        )
     }
 }
