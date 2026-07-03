@@ -26,24 +26,28 @@ object WorkspaceManager {
         return listFilesInternal(context, rootDoc)
     }
 
-    private fun listFilesInternal(context: Context, parentDoc: DocumentFile): List<WorkspaceFile> {
+    private fun listFilesInternal(context: Context, parentDoc: DocumentFile, depth: Int = 0): List<WorkspaceFile> {
+        if (depth > 6) return emptyList()
         val list = mutableListOf<WorkspaceFile>()
         val files = parentDoc.listFiles()
         for (file in files) {
+            val name = file.name ?: ""
+            if (name == ".git" || name == "node_modules" || name == "build" || name == ".gradle" || name == ".idea") continue
+
             if (file.isDirectory) {
                 list.add(
                     WorkspaceFile(
-                        name = file.name ?: "",
+                        name = name,
                         uriString = file.uri.toString(),
                         isDirectory = true,
                         lastModified = file.lastModified(),
-                        children = listFilesInternal(context, file)
+                        children = listFilesInternal(context, file, depth + 1)
                     )
                 )
             } else {
                 list.add(
                     WorkspaceFile(
-                        name = file.name ?: "",
+                        name = name,
                         uriString = file.uri.toString(),
                         isDirectory = false,
                         size = file.length(),

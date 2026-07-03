@@ -44,9 +44,9 @@ fun ChatAgentScreen(
     val listState = rememberLazyListState()
     
     // Auto-scroll to bottom
-    LaunchedEffect(messages.size, viewModel.activeStreamingText) {
+    LaunchedEffect(messages.size, viewModel.activeStreamingText.length) {
         if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size)
+            listState.scrollToItem(messages.size)
         }
     }
 
@@ -112,7 +112,7 @@ fun ChatAgentScreen(
                     }
                 }
 
-                items(messages) { message ->
+                items(messages, key = { it.id }) { message ->
                     MessageBubble(
                         message = message,
                         onReviewDiff = { onReviewDiff(message.proposedPatches) },

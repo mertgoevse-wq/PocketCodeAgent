@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pocketcodeagent.data.model.FilePatch
+import com.pocketcodeagent.data.model.FilePatchAction
 import com.pocketcodeagent.data.repository.DiffLine
 import com.pocketcodeagent.data.repository.DiffLineType
 import com.pocketcodeagent.ui.theme.ElectricTeal
@@ -179,10 +180,10 @@ fun DiffReviewScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "Aktion: ${activeChange.action.uppercase()}",
-                                color = when (activeChange.action.lowercase()) {
-                                    "create" -> Color(0xFF88FF88)
-                                    "delete" -> Color(0xFFFF8888)
+                                text = "Aktion: ${activeChange.action.name}",
+                                color = when (activeChange.action) {
+                                    FilePatchAction.CREATE -> Color(0xFF88FF88)
+                                    FilePatchAction.DELETE -> Color(0xFFFF8888)
                                     else -> ElectricTeal
                                 },
                                 fontSize = 11.sp,

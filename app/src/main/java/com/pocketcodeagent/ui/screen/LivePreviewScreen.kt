@@ -77,6 +77,14 @@ fun LivePreviewScreen(
     // Captured console logs
     val consoleLogs = remember { mutableStateListOf<String>() }
 
+    // Cleanup WebView on exit
+    DisposableEffect(Unit) {
+        onDispose {
+            webViewInstance?.destroy()
+            webViewInstance = null
+        }
+    }
+
     // 1. Initial file check
     LaunchedEffect(workspaceUriString) {
         if (workspaceUriString != null) {

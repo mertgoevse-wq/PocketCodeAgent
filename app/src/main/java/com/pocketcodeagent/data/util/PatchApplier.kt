@@ -2,6 +2,7 @@ package com.pocketcodeagent.data.util
 
 import com.pocketcodeagent.data.local.DocumentFileWorkspace
 import com.pocketcodeagent.data.model.FilePatch
+import com.pocketcodeagent.data.model.FilePatchAction
 
 object PatchApplier {
 
@@ -19,43 +20,37 @@ object PatchApplier {
             // Backup the file first to support Undo
             workspace.backupFile(patch.path)
 
-            when (patch.action.lowercase()) {
-                "create" -> {
-                    val success = workspace.writeFile(patch.path, patch.newText)
+            when (patch.action) {
+                FilePatchAction.CREATE -> {
+                    if (workspace.exists(patch.path)) {
+                        return PatchResult.Error("File already exists: ${patch.path}")
+                    }
+                    val success = workspace.writeFile(patch.path, patch.newText.orEmpty())
                     return if (success) PatchResult.Success else PatchResult.Error("Failed to write new file: ${patch.path}")
                 }
-                "modify" -> {
+                FilePatchAction.MODIFY -> {
                     val currentContent = workspace.readFile(patch.path)
                         ?: return PatchResult.Error("Cannot modify non-existent file: ${patch.path}")
 
-                    val updatedContent = if (patch.oldText.isEmpty()) {
-                        // If oldText is empty, we assume full replacement
-                        patch.newText
-                    } else if (currentContent.contains(patch.oldText)) {
-                        // Standard block replacement
-                        currentContent.replaceOnce(patch.oldText, patch.newText)
+                    val oldText = patch.oldText
+                    val newText = patch.newText.orEmpty()
+                    val updatedContent = if (!oldText.isNullOrEmpty() && currentContent.contains(oldText)) {
+                        currentContent.replaceOnce(oldText, newText)
+                    } else if (oldText.isNullOrEmpty() && patch.replaceWholeFile) {
+                        newText
                     } else {
-                        // Fallback: if oldText matches after normalizing whitespaces
-                        val normalizedCurrent = currentContent.replace("\\s".toRegex(), "")
-                        val normalizedOld = patch.oldText.replace("\\s".toRegex(), "")
-                        if (normalizedCurrent.contains(normalizedOld)) {
-                            // Find matching range and replace it, or fallback to replace entire content if mismatched
-                            patch.newText
-                        } else {
-                            // Fallback: replace entire content to be safe
-                            patch.newText
-                        }
+                        return PatchResult.Error("Patch conflict: oldText was not found exactly in ${patch.path}")
                     }
 
                     val success = workspace.writeFile(patch.path, updatedContent)
                     return if (success) PatchResult.Success else PatchResult.Error("Failed to write modifications to: ${patch.path}")
                 }
-                "delete" -> {
+                FilePatchAction.DELETE -> {
+                    if (!patch.deleteConfirmed) {
+                        return PatchResult.Error("Delete requires second confirmation: ${patch.path}")
+                    }
                     val success = workspace.deleteFile(patch.path)
                     return if (success) PatchResult.Success else PatchResult.Error("Failed to delete file: ${patch.path}")
-                }
-                else -> {
-                    return PatchResult.Error("Unknown patch action: ${patch.action}")
                 }
             }
         } catch (e: Exception) {

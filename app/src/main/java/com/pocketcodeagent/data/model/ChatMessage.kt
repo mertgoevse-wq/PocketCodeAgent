@@ -1,5 +1,7 @@
 package com.pocketcodeagent.data.model
 
+import com.pocketcodeagent.domain.agent.AgentArtifact
+
 data class ChatMessage(
     val id: String = java.util.UUID.randomUUID().toString(),
     val sender: String,
@@ -9,6 +11,7 @@ data class ChatMessage(
     val agentRole: AgentRole? = null,
     val proposedPatches: List<FilePatch> = emptyList(),
     val proposedCommands: List<AgentCommand> = emptyList(),
+    val artifacts: List<AgentArtifact> = emptyList(),
     var isCommandExecuted: Boolean = false,
     var isApplied: Boolean = false
 )

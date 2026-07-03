@@ -8,17 +8,23 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pocketcodeagent.data.model.FilePatch
+import com.pocketcodeagent.data.model.FilePatchAction
 import com.pocketcodeagent.data.model.WorkspaceFile
 import com.pocketcodeagent.data.repository.DiffLine
 import com.pocketcodeagent.data.repository.WorkspaceRepository
+import com.pocketcodeagent.domain.workspace.PatchApplyResult
+import com.pocketcodeagent.domain.workspace.UndoResult
+import com.pocketcodeagent.domain.workspace.WorkspacePatchApplier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class WorkspaceViewModel(val repository: WorkspaceRepository) : ViewModel() {
+    private val patchApplier = WorkspacePatchApplier(repository.workspace)
 
     var files by mutableStateOf<List<WorkspaceFile>>(emptyList())
     var isLoadingFiles by mutableStateOf(false)
+    var isApplyingPatch by mutableStateOf(false)
 
     // Current open file editing
     var openFileContent by mutableStateOf("")
@@ -83,18 +89,19 @@ class WorkspaceViewModel(val repository: WorkspaceRepository) : ViewModel() {
             workspaceError = null
             repository.workspace.setRootUri(rootUriString)
             
-            val original = if (patch.action.lowercase() == "create") {
-                ""
-            } else {
-                withContext(Dispatchers.IO) {
+            val original = when (patch.action) {
+                FilePatchAction.CREATE -> ""
+                FilePatchAction.MODIFY -> patch.oldText ?: withContext(Dispatchers.IO) {
                     repository.workspace.readFile(patch.path) ?: ""
+                }
+                FilePatchAction.DELETE -> withContext(Dispatchers.IO) {
+                    repository.workspace.readFile(patch.path) ?: patch.oldText.orEmpty()
                 }
             }
             
-            val modified = if (patch.action.lowercase() == "delete") {
-                ""
-            } else {
-                patch.newText
+            val modified = when (patch.action) {
+                FilePatchAction.DELETE -> ""
+                else -> patch.newText.orEmpty()
             }
             
             val diff = withContext(Dispatchers.IO) {
@@ -105,76 +112,89 @@ class WorkspaceViewModel(val repository: WorkspaceRepository) : ViewModel() {
     }
 
     fun applyPatch(rootUriString: String, patch: FilePatch, onComplete: (Boolean) -> Unit) {
+        applyWorkspacePatch(rootUriString, patch) { result ->
+            onComplete(result.success)
+        }
+    }
+
+    fun applyWorkspacePatch(rootUriString: String, patch: FilePatch, onComplete: (PatchApplyResult) -> Unit) {
         viewModelScope.launch {
             workspaceError = null
             repository.workspace.setRootUri(rootUriString)
+            isApplyingPatch = true
             
             val result = withContext(Dispatchers.IO) {
-                com.pocketcodeagent.data.util.PatchApplier.applyPatch(repository.workspace, patch)
+                patchApplier.applyPatch(patch)
             }
-            
-            when (result) {
-                is com.pocketcodeagent.data.util.PatchApplier.PatchResult.Success -> {
-                    appliedPatchesHistory.add(patch)
-                    lastFileWriteTimestamp = System.currentTimeMillis()
-                    onComplete(true)
-                }
-                is com.pocketcodeagent.data.util.PatchApplier.PatchResult.Error -> {
-                    workspaceError = result.message
-                    onComplete(false)
-                }
+            isApplyingPatch = false
+
+            if (result.success) {
+                appliedPatchesHistory.add(patch)
+                lastFileWriteTimestamp = System.currentTimeMillis()
+                loadWorkspace(rootUriString)
+            } else {
+                workspaceError = result.message
             }
+            onComplete(result)
         }
     }
 
     fun applyAllPatches(rootUriString: String, patches: List<FilePatch>, onComplete: (Boolean) -> Unit) {
+        applyWorkspacePatches(rootUriString, patches) { results ->
+            onComplete(results.all { it.success })
+        }
+    }
+
+    fun applyWorkspacePatches(rootUriString: String, patches: List<FilePatch>, onComplete: (List<PatchApplyResult>) -> Unit) {
         viewModelScope.launch {
             workspaceError = null
             repository.workspace.setRootUri(rootUriString)
+            isApplyingPatch = true
             
-            val success = withContext(Dispatchers.IO) {
-                var allOk = true
-                for (patch in patches) {
-                    val result = com.pocketcodeagent.data.util.PatchApplier.applyPatch(repository.workspace, patch)
-                    if (result is com.pocketcodeagent.data.util.PatchApplier.PatchResult.Success) {
-                        appliedPatchesHistory.add(patch)
-                    } else if (result is com.pocketcodeagent.data.util.PatchApplier.PatchResult.Error) {
-                        workspaceError = result.message
-                        allOk = false
-                        break
-                    }
-                }
-                allOk
+            val results = withContext(Dispatchers.IO) {
+                patchApplier.applyPatches(patches)
             }
-            if (success) {
+            isApplyingPatch = false
+
+            if (results.any { it.success }) {
                 lastFileWriteTimestamp = System.currentTimeMillis()
+                appliedPatchesHistory.addAll(patches.filter { patch -> results.any { it.patchId == patch.id && it.success } })
+                loadWorkspace(rootUriString)
             }
-            onComplete(success)
+            results.firstOrNull { !it.success }?.let {
+                workspaceError = it.message
+            }
+            onComplete(results)
         }
     }
 
     fun undoLastPatch(rootUriString: String, onComplete: (Boolean) -> Unit) {
+        undoLastApply(rootUriString) { result ->
+            onComplete(result.success)
+        }
+    }
+
+    fun undoLastApply(rootUriString: String, onComplete: (UndoResult) -> Unit) {
         viewModelScope.launch {
-            if (appliedPatchesHistory.isEmpty()) {
-                onComplete(false)
-                return@launch
-            }
-            
             workspaceError = null
             repository.workspace.setRootUri(rootUriString)
-            val lastPatch = appliedPatchesHistory.last()
+            isApplyingPatch = true
             
-            val success = withContext(Dispatchers.IO) {
-                com.pocketcodeagent.data.util.PatchApplier.undoPatch(repository.workspace, lastPatch)
+            val result = withContext(Dispatchers.IO) {
+                patchApplier.undoLastApply()
             }
-            
-            if (success) {
-                appliedPatchesHistory.removeAt(appliedPatchesHistory.size - 1)
-                onComplete(true)
+            isApplyingPatch = false
+
+            if (result.success) {
+                if (appliedPatchesHistory.isNotEmpty()) {
+                    appliedPatchesHistory.clear()
+                }
+                lastFileWriteTimestamp = System.currentTimeMillis()
+                loadWorkspace(rootUriString)
             } else {
-                workspaceError = "Failed to undo patch for file: ${lastPatch.path}"
-                onComplete(false)
+                workspaceError = result.message
             }
+            onComplete(result)
         }
     }
 

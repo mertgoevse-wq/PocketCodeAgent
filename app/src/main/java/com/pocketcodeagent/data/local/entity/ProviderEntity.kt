@@ -7,9 +7,13 @@ import androidx.room.PrimaryKey
 data class ProviderEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val name: String,
+    val providerType: String = "CUSTOM_OPENAI",
     val baseUrl: String,
     val encryptedApiKey: String,
     val modelName: String,
     val customHeadersJson: String = "",
-    val isStreamSupported: Boolean = true
+    val isStreamSupported: Boolean = true,
+    val enabled: Boolean = true,
+    val lastTestStatus: String? = null,
+    val lastErrorSanitized: String? = null
 )
