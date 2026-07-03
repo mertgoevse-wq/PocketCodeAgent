@@ -156,3 +156,12 @@
   - Implemented Local Server Mode (Modus B) default-binding to `http://127.0.0.1:5173`.
   - Configured error layout overlays catching browser timeouts and server unreachable states.
   - Rendered Termux setup instruction cards with quick clipboard-copy shortcuts.
+
+---
+
+### Expansion: Stable Compilation Pipelines & Release Onboarding
+
+- **Release Build Manual (`BUILD_APK_GUIDE.md`)**:
+  - Published a comprehensive build and installation manual mapping PowerShell build commands (`.\gradlew.bat assembleDebug`), output paths, MTP/ADB transfers, unknown source permission configurations, and Java version conflict resolutions.
+- **Manifest & Res Audit (`AndroidManifest.xml` & `strings.xml`)**:
+  - Inspected and locked system permissions (INTERNET, ACCESS_NETWORK_STATE, POST_NOTIFICATIONS) and application metadata to assure a completely crash-free runtime environment.
