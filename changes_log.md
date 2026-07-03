@@ -90,3 +90,19 @@
 
 - **Auto-Reload Bus (`WorkspaceViewModel.kt` & `LivePreviewScreen.kt`)**:
   - Linked the workspace file-write timestamp state variable to a `LaunchedEffect` loop inside the WebView parent, allowing automatic page reloads whenever code is modified.
+
+---
+
+### Expansion: Terminal Screen & Safety Filters
+
+- **Termux Installation Status (`TerminalScreen.kt`)**:
+  - Added package manager checks to detect if `com.termux` is installed on the host Android device, showing dynamic color-coded badges and descriptions.
+
+- **Command Safety Filter & Warnings (`TerminalScreen.kt`)**:
+  - Added a regex-like filter checking for dangerous command executions (`rm -rf`, `rm -r`, `chmod 777`, `curl | sh`, `wget | sh`, `sudo`). Shows warning callouts and informative details for blocked commands.
+
+- **Execution Confirmation Dialog (`TerminalScreen.kt`)**:
+  - Created a confirmation dialog requiring explicit user approval before execution and clipboard copies.
+
+- **Quick Copy Shortcuts & Intents (`TerminalScreen.kt`)**:
+  - Added clipboard copy shortcuts next to each recommended and executed history log. Added intent launchers to open Termux automatically when commands are approved.
