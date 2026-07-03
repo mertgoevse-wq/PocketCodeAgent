@@ -70,3 +70,23 @@
   - Modified `ChatAgentScreen.kt` to pass lists of `FilePatch` objects to the reviewer flow, and display recommended commands alongside their descriptive reasons.
   - Rewrote `DiffReviewScreen.kt` to render patch action types, apply patches via `WorkspaceViewModel`, and display write-permission error banners dynamically.
   - Integrated `MainActivity.kt` and `MainViewModel.kt` to route file patches and filter accepted/rejected entries in the state stack.
+
+---
+
+### Expansion: Live Preview & Dev Server Integration
+
+- **Vite & React Project Detection (`LivePreviewScreen.kt`)**:
+  - Implemented dynamic detection of project configurations by scanning workspace folders for `package.json` and checking for Vite or React definitions.
+  - When detected, the preview panel automatically scales to local dev server layout and defaults the WebView loading address to `http://127.0.0.1:5173`.
+
+- **Segmented tab layout (`LivePreviewScreen.kt`)**:
+  - Replaced the simple preview display with a structured, 3-tab user interface:
+    1. 👁️ **Preview**: Displays the WebView renderer area with project-type alert banners.
+    2. 💻 **Console Logs**: Lists color-coded javascript console logs (`console.log`, `console.error`, `console.warn`) captured directly from the page.
+    3. ⚙️ **Termux Bridge**: Shows Termux commands and offers quick actions to copy commands and launch the Termux app via android intents.
+
+- **WebChromeClient Console Interceptor (`LivePreviewScreen.kt`)**:
+  - Overrode WebView's default `WebChromeClient.onConsoleMessage` callback to capture and map internal browser log lines to a reactive list.
+
+- **Auto-Reload Bus (`WorkspaceViewModel.kt` & `LivePreviewScreen.kt`)**:
+  - Linked the workspace file-write timestamp state variable to a `LaunchedEffect` loop inside the WebView parent, allowing automatic page reloads whenever code is modified.
