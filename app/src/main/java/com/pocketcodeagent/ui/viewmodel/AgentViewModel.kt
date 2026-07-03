@@ -13,6 +13,11 @@ import com.pocketcodeagent.data.repository.AgentRepository
 import com.pocketcodeagent.data.repository.ProviderRepository
 import com.pocketcodeagent.domain.agent.AgentMode
 import com.pocketcodeagent.domain.agent.AgentRunState
+import com.pocketcodeagent.domain.agent.CommandRiskLevel
+import com.pocketcodeagent.domain.agent.CommandRiskScanner
+import com.pocketcodeagent.domain.terminal.CommandSource
+import com.pocketcodeagent.domain.terminal.CommandStatus
+import com.pocketcodeagent.domain.terminal.TerminalCommand
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -37,7 +42,7 @@ class AgentViewModel(
     private var agentJob: Job? = null
 
     // Terminal Commands State
-    val recommendedCommands = mutableStateListOf<String>()
+    val terminalCommands = mutableStateListOf<TerminalCommand>()
     val executedCommands = mutableStateListOf<String>()
 
     // Diagnostic logs
@@ -110,7 +115,17 @@ class AgentViewModel(
                 runState = AgentRunState.ParsingActions
                 chatMessages.add(it)
                 if (it.proposedCommands.isNotEmpty()) {
-                    recommendedCommands.addAll(it.proposedCommands.map { cmd -> cmd.command })
+                    it.proposedCommands.forEach { cmd ->
+                        val risk = CommandRiskScanner.scan(cmd.command)
+                        terminalCommands.add(
+                            TerminalCommand(
+                                command = cmd.command,
+                                reason = cmd.reason ?: "Vom Agenten vorgeschlagen",
+                                riskLevel = risk,
+                                source = CommandSource.AGENT
+                            )
+                        )
+                    }
                 }
                 runState = if (it.proposedPatches.isNotEmpty() || it.proposedCommands.isNotEmpty()) {
                     AgentRunState.WaitingForApproval
@@ -124,27 +139,57 @@ class AgentViewModel(
     }
 
     fun queueTerminalCommand(command: String) {
-        if (command.isBlank() || recommendedCommands.contains(command)) return
-        recommendedCommands.add(command)
+        if (command.isBlank()) return
+        if (terminalCommands.any { it.command == command && it.status == CommandStatus.QUEUED }) return
+        val risk = CommandRiskScanner.scan(command)
+        terminalCommands.add(
+            TerminalCommand(
+                command = command,
+                reason = null,
+                riskLevel = risk,
+                source = CommandSource.USER
+            )
+        )
     }
 
-    fun executeTerminalCommand(command: String) {
-        recommendedCommands.remove(command)
-        if (!executedCommands.contains(command)) {
-            executedCommands.add(command)
-        }
-        viewModelScope.launch {
-            providerRepository.log("TERMINAL", "Command marked for external execution: $command")
+    fun markCommandCopied(commandId: String) {
+        val idx = terminalCommands.indexOfFirst { it.id == commandId }
+        if (idx >= 0) terminalCommands[idx] = terminalCommands[idx].markCopied()
+    }
+
+    fun markCommandDone(commandId: String) {
+        val idx = terminalCommands.indexOfFirst { it.id == commandId }
+        if (idx >= 0) {
+            val cmd = terminalCommands[idx]
+            terminalCommands[idx] = cmd.markDone()
+            if (!executedCommands.contains(cmd.command)) {
+                executedCommands.add(cmd.command)
+            }
         }
     }
 
-    fun rejectTerminalCommand(command: String) {
-        recommendedCommands.remove(command)
+    fun rejectCommand(commandId: String) {
+        val idx = terminalCommands.indexOfFirst { it.id == commandId }
+        if (idx >= 0) terminalCommands[idx] = terminalCommands[idx].reject()
+    }
+
+    fun rejectAllCommands() {
+        val updated = terminalCommands.map { if (it.status != CommandStatus.REJECTED) it.reject() else it }
+        terminalCommands.clear()
+        terminalCommands.addAll(updated)
+    }
+
+    fun clearCompletedCommands() {
+        terminalCommands.removeAll { it.status == CommandStatus.MARKED_DONE }
+    }
+
+    fun clearRejectedCommands() {
+        terminalCommands.removeAll { it.status == CommandStatus.REJECTED }
     }
 
     fun clearChat() {
         chatMessages.clear()
-        recommendedCommands.clear()
+        terminalCommands.clear()
     }
 
     fun clearLogs() {

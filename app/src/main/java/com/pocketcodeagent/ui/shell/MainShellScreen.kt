@@ -256,6 +256,9 @@ fun MainShellScreen(
 
                 AppTab.TERMINAL -> TerminalPanel(
                     viewModel = agentViewModel,
+                    onSetPreviewUrl = { url ->
+                        mainViewModel.setPreviewUrl(url)
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
             }

@@ -116,7 +116,7 @@ fun ChatAgentScreen(
                     MessageBubble(
                         message = message,
                         onReviewDiff = { onReviewDiff(message.proposedPatches) },
-                        onExecuteCommand = { viewModel.executeTerminalCommand(it) }
+                        onExecuteCommand = { viewModel.queueTerminalCommand(it) }
                     )
                 }
 

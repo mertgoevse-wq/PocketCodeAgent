@@ -38,7 +38,7 @@ fun TerminalScreen(
     onBackClick: () -> Unit
 ) {
     val context = LocalContext.current
-    val recommended = viewModel.recommendedCommands
+    val recommended = viewModel.terminalCommands
     val executed = viewModel.executedCommands
     var manualCommand by remember { mutableStateOf("") }
 
@@ -199,7 +199,7 @@ fun TerminalScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "$ $cmd",
+                                    text = "$ ${cmd.safeDisplay}",
                                     color = Color.White,
                                     fontFamily = FontFamily.Monospace,
                                     fontSize = 12.sp,
@@ -209,7 +209,7 @@ fun TerminalScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     // Copy shortcut
                                     IconButton(
-                                        onClick = { copyToClipboard(cmd) },
+                                        onClick = { copyToClipboard(cmd.command) },
                                         modifier = Modifier.size(28.dp)
                                     ) {
                                         Icon(
@@ -223,7 +223,7 @@ fun TerminalScreen(
                                     Spacer(modifier = Modifier.width(4.dp))
 
                                     TextButton(
-                                        onClick = { viewModel.rejectTerminalCommand(cmd) },
+                                        onClick = { viewModel.rejectCommand(cmd.id) },
                                         contentPadding = PaddingValues(horizontal = 4.dp)
                                     ) {
                                         Text("Reject", color = Color.Red, fontSize = 11.sp)
@@ -231,8 +231,8 @@ fun TerminalScreen(
 
                                     Button(
                                         onClick = {
-                                            warningMessage = getDangerousWarning(cmd)
-                                            commandToConfirm = cmd
+                                            warningMessage = getDangerousWarning(cmd.command)
+                                            commandToConfirm = cmd.command
                                         },
                                         colors = ButtonDefaults.buttonColors(containerColor = ElectricTeal),
                                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
@@ -393,7 +393,9 @@ fun TerminalScreen(
                         // Copy to clipboard
                         copyToClipboard(cmd)
                         // Log simulated execution
-                        viewModel.executeTerminalCommand(cmd)
+                        viewModel.queueTerminalCommand(cmd)
+                        val tc = viewModel.terminalCommands.lastOrNull()
+                        if (tc != null) viewModel.markCommandDone(tc.id)
                         
                         // Clear input
                         if (cmd == manualCommand) {
