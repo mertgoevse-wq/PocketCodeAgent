@@ -3,14 +3,16 @@ package com.pocketcodeagent.ui.screen
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,9 +20,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Web
 import androidx.compose.material3.*
@@ -34,9 +37,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.pocketcodeagent.ui.theme.ElectricTeal
-import com.pocketcodeagent.ui.theme.GlowPink
-import com.pocketcodeagent.ui.theme.NeonPurple
+import com.pocketcodeagent.ui.theme.CalmSage
+import com.pocketcodeagent.ui.theme.DarkSurface
+import com.pocketcodeagent.ui.theme.DeepSlateBackground
+import com.pocketcodeagent.ui.theme.SlateBlue
+import com.pocketcodeagent.ui.theme.TextPrimary
+import com.pocketcodeagent.ui.theme.TextSecondary
+import com.pocketcodeagent.ui.theme.WarmCopper
 import com.pocketcodeagent.ui.viewmodel.WorkspaceViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -47,172 +54,169 @@ fun LivePreviewScreen(
     onBackClick: () -> Unit
 ) {
     val context = LocalContext.current
-    var selectedTab by remember { mutableStateOf(0) } // 0: Preview, 1: Console Logs, 2: Termux Bridge
-    
+    var activeModeTab by remember { mutableStateOf(0) } // 0: Static Preview, 1: Local Server, 2: Console, 3: Termux Help
+
     var previewUrl by remember { mutableStateOf("http://127.0.0.1:5173") }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var indexHtmlUriString by remember { mutableStateOf<String?>(null) }
+    var selectedHtmlName by remember { mutableStateOf("index.html") }
     var staticHtmlContent by remember { mutableStateOf<String?>(null) }
-    var isStaticMode by remember { mutableStateOf(false) }
     
-    // React/Vite project detection state
-    var isViteProject by remember { mutableStateOf(false) }
-    var isReactProject by remember { mutableStateOf(false) }
+    // WebView Settings states
+    var jsEnabled by remember { mutableStateOf(true) }
+    var domStorageEnabled by remember { mutableStateOf(true) }
+    var allowFileAccess by remember { mutableStateOf(true) }
+    
+    // Error state
+    var webErrorState by remember { mutableStateOf<String?>(null) }
 
-    // Console logs captured from WebView
+    // Dialogs
+    var showSettingsDialog by remember { mutableStateOf(false) }
+    var showFilePickerDialog by remember { mutableStateOf(false) }
+
+    // Captured console logs
     val consoleLogs = remember { mutableStateListOf<String>() }
 
-    // Dialog state for custom URL configuration
-    var showUrlDialog by remember { mutableStateOf(false) }
-    var customUrlInput by remember { mutableStateOf(previewUrl) }
-
-    // 1. Scan workspace for index.html and package.json
+    // 1. Initial file check
     LaunchedEffect(workspaceUriString) {
         if (workspaceUriString != null) {
-            // Check for index.html
             val indexUri = viewModel.repository.getFileUriByRelativePath(workspaceUriString, "index.html")
             if (indexUri != null) {
                 indexHtmlUriString = indexUri.toString()
+                selectedHtmlName = "index.html"
                 staticHtmlContent = viewModel.repository.readFile(indexUri.toString())
-                isStaticMode = true
-            } else {
-                isStaticMode = false
-            }
-
-            // Check for package.json to detect Vite/React
-            val packageJsonUri = viewModel.repository.getFileUriByRelativePath(workspaceUriString, "package.json")
-            if (packageJsonUri != null) {
-                val content = viewModel.repository.readFile(packageJsonUri.toString())
-                if (content.isNotEmpty()) {
-                    isViteProject = content.contains("\"vite\"")
-                    isReactProject = content.contains("\"react\"")
-                    if (isViteProject) {
-                        isStaticMode = false // Dev server has priority over raw static file
-                    }
-                }
             }
         }
     }
 
-    // 2. React to workspace file edits to auto-reload WebView
+    // 2. Auto-reload trigger on file edits
     LaunchedEffect(viewModel.lastFileWriteTimestamp) {
         if (viewModel.lastFileWriteTimestamp > 0) {
-            consoleLogs.add("[System] 🔄 File edit detected. Reloading preview...")
-            if (isStaticMode && indexHtmlUriString != null) {
+            consoleLogs.add("[System] 🔄 Dateiänderung erkannt. Lade neu...")
+            webErrorState = null
+            if (activeModeTab == 0 && indexHtmlUriString != null) {
                 staticHtmlContent = viewModel.repository.readFile(indexHtmlUriString!!)
-                webViewInstance?.loadDataWithBaseURL("", staticHtmlContent ?: "", "text/html", "UTF-8", null)
-            } else {
+                webViewInstance?.loadDataWithBaseURL("file:///", staticHtmlContent ?: "", "text/html", "UTF-8", null)
+            } else if (activeModeTab == 1) {
                 webViewInstance?.reload()
             }
         }
     }
 
+    // Helper to copy to clipboard
+    fun copyToClipboard(label: String, text: String) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText(label, text)
+        clipboard.setPrimaryClip(clip)
+        Toast.makeText(context, "Kopiert! 📋", Toast.LENGTH_SHORT).show()
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Live Preview Panel 👁️", color = Color.White, fontWeight = FontWeight.Bold) },
+                title = { Text("Live Preview Panel 👁️", color = TextPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
                 actions = {
-                    // Set custom preview URL button
-                    if (!isStaticMode) {
-                        IconButton(onClick = { 
-                            customUrlInput = previewUrl
-                            showUrlDialog = true 
-                        }) {
-                            Icon(imageVector = Icons.Default.Link, contentDescription = "Set URL", tint = ElectricTeal)
-                        }
+                    // Settings button
+                    IconButton(onClick = { showSettingsDialog = true }) {
+                        Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings", tint = SlateBlue)
                     }
-
                     // Reload button
                     IconButton(onClick = {
-                        consoleLogs.add("[System] 🔄 Manual reload triggered.")
-                        if (isStaticMode && indexHtmlUriString != null) {
+                        webErrorState = null
+                        consoleLogs.add("[System] 🔄 Manuelles Neuladen ausgelöst.")
+                        if (activeModeTab == 0 && indexHtmlUriString != null) {
                             staticHtmlContent = viewModel.repository.readFile(indexHtmlUriString!!)
-                            webViewInstance?.loadDataWithBaseURL("", staticHtmlContent ?: "", "text/html", "UTF-8", null)
+                            webViewInstance?.loadDataWithBaseURL("file:///", staticHtmlContent ?: "", "text/html", "UTF-8", null)
                         } else {
                             webViewInstance?.reload()
                         }
                     }) {
-                        Icon(imageVector = Icons.Default.Refresh, contentDescription = "Reload", tint = ElectricTeal)
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = "Reload", tint = CalmSage)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF0F0C1B))
             )
         },
-        containerColor = Color(0xFF0C0A14)
+        containerColor = DeepSlateBackground
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Segmented Tabs
+            // Tab Row selectors
             TabRow(
-                selectedTabIndex = selectedTab,
+                selectedTabIndex = activeModeTab,
                 containerColor = Color(0xFF0F0C1B),
-                contentColor = ElectricTeal
+                contentColor = SlateBlue
             ) {
                 Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = { Text("Preview", fontWeight = FontWeight.Bold) },
-                    icon = { Icon(imageVector = Icons.Default.Web, contentDescription = null) }
+                    selected = activeModeTab == 0,
+                    onClick = { activeModeTab = 0; webErrorState = null },
+                    text = { Text("Static Web", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                    icon = { Icon(imageVector = Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 )
                 Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = { Text("Console (${consoleLogs.size})", fontWeight = FontWeight.Bold) },
-                    icon = { Icon(imageVector = Icons.Default.ListAlt, contentDescription = null) }
+                    selected = activeModeTab == 1,
+                    onClick = { activeModeTab = 1; webErrorState = null },
+                    text = { Text("Local Server", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                    icon = { Icon(imageVector = Icons.Default.Web, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 )
                 Tab(
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
-                    text = { Text("Termux Bridge", fontWeight = FontWeight.Bold) },
-                    icon = { Icon(imageVector = Icons.Default.Terminal, contentDescription = null) }
+                    selected = activeModeTab == 2,
+                    onClick = { activeModeTab = 2 },
+                    text = { Text("Logs (${consoleLogs.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                    icon = { Icon(imageVector = Icons.Default.ListAlt, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                )
+                Tab(
+                    selected = activeModeTab == 3,
+                    onClick = { activeModeTab = 3 },
+                    text = { Text("Termux Hilfe", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                    icon = { Icon(imageVector = Icons.Default.Terminal, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 )
             }
 
-            // Tab rendering
-            when (selectedTab) {
+            when (activeModeTab) {
                 0 -> {
-                    // Preview Renderer Area
+                    // MODUS A: Static Web Preview
                     Column(modifier = Modifier.fillMaxSize()) {
-                        // Project detection banner
                         Surface(
-                            color = Color(0xFF1E1A33),
+                            color = DarkSurface,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                val bannerTitle = if (isViteProject) {
-                                    "⚡ Vite project detected"
-                                } else if (isStaticMode) {
-                                    "📁 Static HTML Preview (index.html)"
-                                } else {
-                                    "🌐 Custom Server Preview"
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Geladene Datei:", color = TextSecondary, fontSize = 10.sp)
+                                    Text(
+                                        text = selectedHtmlName,
+                                        color = TextPrimary,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp
+                                    )
                                 }
-                                
-                                val bannerSubtitle = if (isViteProject) {
-                                    "Active on: $previewUrl"
-                                } else if (isStaticMode) {
-                                    "Rendering index.html directly with auto-reload"
-                                } else {
-                                    "Listening on: $previewUrl"
-                                }
-
-                                Column {
-                                    Text(text = bannerTitle, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    Text(text = bannerSubtitle, color = Color.LightGray, fontSize = 11.sp)
+                                Button(
+                                    onClick = { showFilePickerDialog = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),
+                                    shape = RoundedCornerShape(6.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Text("Wähle Datei", color = Color.White, fontSize = 11.sp)
                                 }
                             }
                         }
 
+                        // WebView Render Box
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -220,47 +224,195 @@ fun LivePreviewScreen(
                                 .padding(8.dp)
                                 .background(Color.White, shape = RoundedCornerShape(8.dp))
                         ) {
-                            AndroidView(
-                                factory = { ctx ->
-                                    WebView(ctx).apply {
-                                        webViewClient = object : WebViewClient() {
-                                            override fun onPageFinished(view: WebView?, url: String?) {
-                                                super.onPageFinished(view, url)
-                                                consoleLogs.add("[System] Loaded page: $url")
-                                            }
-                                        }
-                                        webChromeClient = object : WebChromeClient() {
-                                            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
-                                                consoleMessage?.let {
-                                                    val level = it.messageLevel().name
-                                                    val log = "[$level] ${it.message()} (${it.sourceId()}:${it.lineNumber()})"
-                                                    consoleLogs.add(log)
-                                                }
-                                                return true
-                                            }
-                                        }
-                                        settings.javaScriptEnabled = true
-                                        settings.domStorageEnabled = true
-                                        webViewInstance = this
-                                        
-                                        if (isStaticMode && staticHtmlContent != null) {
-                                            loadDataWithBaseURL("", staticHtmlContent!!, "text/html", "UTF-8", null)
-                                        } else {
-                                            loadUrl(previewUrl)
-                                        }
+                            if (webErrorState != null) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color(0xFF2D1818))
+                                        .padding(24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Text("⚠️ WebView Fehler", color = WarmCopper, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(webErrorState!!, color = Color.LightGray, fontSize = 13.sp)
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Button(
+                                        onClick = {
+                                            webErrorState = null
+                                            webViewInstance?.loadDataWithBaseURL("file:///", staticHtmlContent ?: "", "text/html", "UTF-8", null)
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = SlateBlue)
+                                    ) {
+                                        Text("Wiederholen", color = Color.White)
                                     }
-                                },
-                                update = { webView ->
-                                    webViewInstance = webView
-                                },
-                                modifier = Modifier.fillMaxSize()
-                            )
+                                }
+                            } else {
+                                AndroidView(
+                                    factory = { ctx ->
+                                        WebView(ctx).apply {
+                                            webViewClient = object : WebViewClient() {
+                                                override fun onReceivedError(
+                                                    view: WebView?,
+                                                    request: WebResourceRequest?,
+                                                    error: WebResourceError?
+                                                ) {
+                                                    super.onReceivedError(view, request, error)
+                                                    webErrorState = error?.description?.toString() ?: "Fehler beim Laden"
+                                                }
+                                            }
+                                            webChromeClient = object : WebChromeClient() {
+                                                override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                                                    consoleMessage?.let {
+                                                        consoleLogs.add("[${it.messageLevel().name}] ${it.message()} (${it.sourceId()}:${it.lineNumber()})")
+                                                    }
+                                                    return true
+                                                }
+                                            }
+                                            settings.javaScriptEnabled = jsEnabled
+                                            settings.domStorageEnabled = domStorageEnabled
+                                            settings.allowFileAccess = allowFileAccess
+                                            webViewInstance = this
+                                            
+                                            if (staticHtmlContent != null) {
+                                                loadDataWithBaseURL("file:///", staticHtmlContent!!, "text/html", "UTF-8", null)
+                                            } else {
+                                                loadDataWithBaseURL("file:///", "<html><body><h3 style='color:#666;text-align:center;padding-top:100px;'>Keine index.html im Workspace gefunden.</h3></body></html>", "text/html", "UTF-8", null)
+                                            }
+                                        }
+                                    },
+                                    update = { webView ->
+                                        webViewInstance = webView
+                                        webView.settings.javaScriptEnabled = jsEnabled
+                                        webView.settings.domStorageEnabled = domStorageEnabled
+                                        webView.settings.allowFileAccess = allowFileAccess
+                                    },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                         }
                     }
                 }
 
                 1 -> {
-                    // Console Logs Output console
+                    // MODUS B: Local Server Preview
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Surface(
+                            color = DarkSurface,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedTextField(
+                                        value = previewUrl,
+                                        onValueChange = { previewUrl = it },
+                                        label = { Text("Server URL Link") },
+                                        modifier = Modifier.weight(1f),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = Color.White,
+                                            unfocusedTextColor = Color.White,
+                                            focusedBorderColor = SlateBlue,
+                                            unfocusedBorderColor = Color(0xFF2E2D34)
+                                        )
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Button(
+                                        onClick = {
+                                            webErrorState = null
+                                            webViewInstance?.loadUrl(previewUrl)
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = SlateBlue)
+                                    ) {
+                                        Text("Load", color = Color.White)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "ℹ️ Für React/Vite/Node-Projekte muss ein lokaler Server z.B. über Termux laufen.",
+                                    color = TextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+
+                        // WebView Render Box
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(8.dp)
+                                .background(Color.White, shape = RoundedCornerShape(8.dp))
+                        ) {
+                            if (webErrorState != null) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color(0xFF2D1818))
+                                        .padding(24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Text("⚠️ Server nicht erreichbar", color = WarmCopper, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("Die Adresse $previewUrl konnte nicht geladen werden. Läuft dein Termux-Server?", color = Color.LightGray, fontSize = 13.sp)
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Button(
+                                        onClick = {
+                                            webErrorState = null
+                                            webViewInstance?.loadUrl(previewUrl)
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = SlateBlue)
+                                    ) {
+                                        Text("Wiederholen", color = Color.White)
+                                    }
+                                }
+                            } else {
+                                AndroidView(
+                                    factory = { ctx ->
+                                        WebView(ctx).apply {
+                                            webViewClient = object : WebViewClient() {
+                                                override fun onReceivedError(
+                                                    view: WebView?,
+                                                    request: WebResourceRequest?,
+                                                    error: WebResourceError?
+                                                ) {
+                                                    super.onReceivedError(view, request, error)
+                                                    // Filter out sub-resources to avoid breaking layout on minor assets
+                                                    if (request?.isForMainFrame == true) {
+                                                        webErrorState = error?.description?.toString() ?: "Verbindung verweigert"
+                                                    }
+                                                }
+                                            }
+                                            webChromeClient = object : WebChromeClient() {
+                                                override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                                                    consoleMessage?.let {
+                                                        consoleLogs.add("[${it.messageLevel().name}] ${it.message()} (${it.sourceId()}:${it.lineNumber()})")
+                                                    }
+                                                    return true
+                                                }
+                                            }
+                                            settings.javaScriptEnabled = jsEnabled
+                                            settings.domStorageEnabled = domStorageEnabled
+                                            settings.allowFileAccess = allowFileAccess
+                                            webViewInstance = this
+                                            loadUrl(previewUrl)
+                                        }
+                                    },
+                                    update = { webView ->
+                                        webViewInstance = webView
+                                    },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
+                    }
+                }
+
+                2 -> {
+                    // Console logs
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -271,17 +423,15 @@ fun LivePreviewScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Captured Console Outputs", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("WebView Konsolenausgaben", color = TextPrimary, fontWeight = FontWeight.Bold)
                             Button(
                                 onClick = { consoleLogs.clear() },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.6f))
+                                colors = ButtonDefaults.buttonColors(containerColor = WarmCopper.copy(alpha = 0.8f))
                             ) {
-                                Text("Clear Logs", color = Color.White)
+                                Text("Clear", color = Color.White)
                             }
                         }
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-
+                        Spacer(modifier = Modifier.height(8.dp))
                         Card(
                             colors = CardDefaults.cardColors(containerColor = Color.Black),
                             shape = RoundedCornerShape(8.dp),
@@ -290,11 +440,8 @@ fun LivePreviewScreen(
                                 .fillMaxWidth()
                         ) {
                             if (consoleLogs.isEmpty()) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("No console logs captured yet.", color = Color.Gray)
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Text("Keine Konsolenlogs aufgefangen.", color = Color.Gray)
                                 }
                             } else {
                                 LazyColumn(
@@ -303,20 +450,11 @@ fun LivePreviewScreen(
                                         .padding(8.dp)
                                 ) {
                                     items(consoleLogs) { log ->
-                                        val color = if (log.contains("ERROR")) {
-                                            Color(0xFFFF8888)
-                                        } else if (log.contains("WARNING")) {
-                                            Color(0xFFFFCC80)
-                                        } else if (log.contains("System")) {
-                                            ElectricTeal
-                                        } else {
-                                            Color.LightGray
-                                        }
                                         Text(
                                             text = log,
-                                            color = color,
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 11.sp,
+                                            color = if (log.contains("ERROR")) Color(0xFFFF8888) else if (log.contains("WARNING")) Color(0xFFFFCC80) else Color.LightGray,
                                             modifier = Modifier.padding(vertical = 2.dp)
                                         )
                                     }
@@ -326,99 +464,36 @@ fun LivePreviewScreen(
                     }
                 }
 
-                2 -> {
-                    // Termux Bridge Instructions panel
-                    Column(
+                3 -> {
+                    // Termux Help Instructions
+                    LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(16.dp)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        val termuxScript = """
-                            cd /sdcard/Android/media/com.pocketcodeagent/
-                            # OR cd into your specific Storage Access Framework workspace folder
-                            npm install
-                            npm run dev -- --host 127.0.0.1
-                        """.trimIndent()
-
-                        Text(
-                            text = "📱 Local Dev Runtime Integration",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Android blocks executing Node.js runtimes inside standard applications. To preview React/Vite projects, you must run a dev server inside Termux (on the same device) and connect this WebView preview panel to it.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.LightGray
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1A33)),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("Termux commands:", color = ElectricTeal, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                    IconButton(onClick = {
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        val clip = ClipData.newPlainText("termux_bridge", termuxScript)
-                                        clipboard.setPrimaryClip(clip)
-                                        Toast.makeText(context, "Commands copied to clipboard!", Toast.LENGTH_SHORT).show()
-                                    }) {
-                                        Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copy", tint = ElectricTeal)
-                                    }
-                                }
-                                Text(
-                                    text = termuxScript,
-                                    color = Color.White,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 11.sp,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(Color.Black.copy(alpha = 0.5f))
-                                        .padding(8.dp)
-                                )
-                            }
+                        item {
+                            Text(
+                                "Vollwertige Runtimes wie Node.js/Vite können auf Android aufgrund von Sandbox-Sperren nicht in normalen Apps laufen. Führe den Server in Termux aus und binde ihn hier ein.",
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
                         }
 
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        Button(
-                            onClick = {
-                                // Copy instructions
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val clip = ClipData.newPlainText("termux_bridge", termuxScript)
-                                clipboard.setPrimaryClip(clip)
-                                
-                                // Attempt to launch Termux App via Intent
-                                try {
-                                    val intent = context.packageManager.getLaunchIntentForPackage("com.termux")
-                                    if (intent != null) {
-                                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        context.startActivity(intent)
-                                        Toast.makeText(context, "Termux opened! Paste the commands there.", Toast.LENGTH_LONG).show()
-                                    } else {
-                                        Toast.makeText(context, "Termux app not found. Please install Termux from F-Droid or GitHub.", Toast.LENGTH_LONG).show()
-                                    }
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "Could not open Termux: ${e.message}", Toast.LENGTH_LONG).show()
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = NeonPurple),
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.Terminal, contentDescription = null, tint = Color.White)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Open Termux Bridge 🚀", color = Color.White)
+                        item {
+                            TermuxCommandCard("1. Update & Repositories", "pkg update") { copyToClipboard("update", "pkg update") }
+                        }
+                        item {
+                            TermuxCommandCard("2. Node & Git installieren", "pkg install nodejs git") { copyToClipboard("install", "pkg install nodejs git") }
+                        }
+                        item {
+                            TermuxCommandCard("3. In Projektordner wechseln", "cd /sdcard/Android/media/com.pocketcodeagent") { copyToClipboard("cd", "cd /sdcard/Android/media/com.pocketcodeagent") }
+                        }
+                        item {
+                            TermuxCommandCard("4. NPM-Pakete installieren", "npm install") { copyToClipboard("npm_install", "npm install") }
+                        }
+                        item {
+                            TermuxCommandCard("5. Dev-Server starten", "npm run dev -- --host 127.0.0.1") { copyToClipboard("run", "npm run dev -- --host 127.0.0.1") }
                         }
                     }
                 }
@@ -426,41 +501,139 @@ fun LivePreviewScreen(
         }
     }
 
-    // Dialog to set custom preview URLs
-    if (showUrlDialog) {
+    // Preview Settings Dialog
+    if (showSettingsDialog) {
         AlertDialog(
-            onDismissRequest = { showUrlDialog = false },
-            title = { Text("Set Preview Server URL Link") },
+            onDismissRequest = { showSettingsDialog = false },
+            title = { Text("WebView Einstellungen") },
             text = {
-                OutlinedTextField(
-                    value = customUrlInput,
-                    onValueChange = { customUrlInput = it },
-                    label = { Text("Server URL") },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = NeonPurple
-                    )
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("JavaScript aktivieren", color = TextPrimary)
+                        Switch(checked = jsEnabled, onCheckedChange = { jsEnabled = it })
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("DOM Storage aktivieren", color = TextPrimary)
+                        Switch(checked = domStorageEnabled, onCheckedChange = { domStorageEnabled = it })
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Lokalem Dateizugriff erlauben", color = TextPrimary)
+                        Switch(checked = allowFileAccess, onCheckedChange = { allowFileAccess = it })
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            webViewInstance?.clearCache(true)
+                            Toast.makeText(context, "WebView Cache geleert", Toast.LENGTH_SHORT).show()
+                            showSettingsDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = WarmCopper),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("WebView Cache leeren", color = Color.White)
+                    }
+                }
             },
             confirmButton = {
                 Button(
-                    onClick = {
-                        previewUrl = customUrlInput
-                        showUrlDialog = false
-                        consoleLogs.add("[System] 🔗 Preview URL changed to: $previewUrl")
-                        webViewInstance?.loadUrl(previewUrl)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = ElectricTeal)
+                    onClick = { showSettingsDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = SlateBlue)
                 ) {
-                    Text("Apply", color = Color(0xFF0C0A14))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showUrlDialog = false }) {
-                    Text("Cancel", color = Color.LightGray)
+                    Text("Schließen", color = Color.White)
                 }
             }
         )
+    }
+
+    // File Picker Dialog (for pick index.html in Workspace)
+    if (showFilePickerDialog) {
+        val htmlFiles = viewModel.files.filter { it.name.endsWith(".html", ignoreCase = true) }
+        AlertDialog(
+            onDismissRequest = { showFilePickerDialog = false },
+            title = { Text("Wähle HTML Startdatei") },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    if (htmlFiles.isEmpty()) {
+                        Text("Keine HTML-Dateien im Workspace gefunden.", color = TextSecondary)
+                    } else {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(htmlFiles) { file ->
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            indexHtmlUriString = file.uriString
+                                            selectedHtmlName = file.name
+                                            staticHtmlContent = viewModel.repository.readFile(file.uriString)
+                                            showFilePickerDialog = false
+                                            webErrorState = null
+                                            webViewInstance?.loadDataWithBaseURL("file:///", staticHtmlContent ?: "", "text/html", "UTF-8", null)
+                                        }
+                                        .padding(8.dp)
+                                ) {
+                                    Text(
+                                        text = file.name,
+                                        color = TextPrimary,
+                                        modifier = Modifier.padding(8.dp),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showFilePickerDialog = false }) {
+                    Text("Abbrechen", color = Color.LightGray)
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun TermuxCommandCard(title: String, command: String, onCopyClick: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(title, color = SlateBlue, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                IconButton(onClick = onCopyClick, modifier = Modifier.size(24.dp)) {
+                    Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copy", tint = CalmSage, modifier = Modifier.size(16.dp))
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = command,
+                color = Color.White,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .padding(8.dp)
+            )
+        }
     }
 }
