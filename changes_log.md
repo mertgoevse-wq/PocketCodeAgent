@@ -183,3 +183,12 @@
   - Added a toggleable line numbering gutter, copy-all utility, and undo stack.
 - **File System Delete Bridge (`WorkspaceViewModel.kt`)**:
   - Added `deleteFile` wrapper mapping repository deletes.
+
+---
+
+### Expansion: Release Preparation & End-to-End QA
+
+- **Final QA Test Plan (`FINAL_TEST_PLAN.md`)**:
+  - Created a test plan for the Galaxy A56 device validating onboarding, dashboard navigation, tree explorer, monospace editor, WebView and Agent workflows.
+- **Release Strategy Guide (`RELEASE_NEXT_STEPS.md`)**:
+  - Published signing build setup instructions and Google Play Console submission workflows.
