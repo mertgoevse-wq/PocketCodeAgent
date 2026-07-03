@@ -34,6 +34,9 @@ class WorkspaceViewModel(val repository: WorkspaceRepository) : ViewModel() {
     // Current operation logs/status for UI
     var workspaceError by mutableStateOf<String?>(null)
 
+    // Timestamp of the last file write to trigger Live Preview auto-reload
+    var lastFileWriteTimestamp by mutableStateOf(0L)
+
     fun initializeWorkspacePermission(uri: Uri) {
         repository.persistWorkspacePermission(uri)
     }
@@ -69,6 +72,7 @@ class WorkspaceViewModel(val repository: WorkspaceRepository) : ViewModel() {
             }
             isOpenFileSaving = false
             if (success) {
+                lastFileWriteTimestamp = System.currentTimeMillis()
                 onSuccess()
             }
         }
@@ -112,6 +116,7 @@ class WorkspaceViewModel(val repository: WorkspaceRepository) : ViewModel() {
             when (result) {
                 is com.pocketcodeagent.data.util.PatchApplier.PatchResult.Success -> {
                     appliedPatchesHistory.add(patch)
+                    lastFileWriteTimestamp = System.currentTimeMillis()
                     onComplete(true)
                 }
                 is com.pocketcodeagent.data.util.PatchApplier.PatchResult.Error -> {
