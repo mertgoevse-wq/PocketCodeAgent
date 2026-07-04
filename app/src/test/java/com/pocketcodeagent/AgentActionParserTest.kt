@@ -312,4 +312,126 @@ let count = 0; document.getElementById('btn').onclick = () => { count++; };
         val result = AgentActionParser.parse(xml)
         assertTrue(result[0].parseWarnings.any { it.contains("playground") })
     }
+
+    // ── Demo Mode Web App Response ───────────────────────────────────────────
+    @Test
+    fun `demo web app XML produces three file actions`() {
+        val xml = demoWebAppXml()
+        val result = AgentActionParser.parse(xml)
+        assertEquals(1, result.size)
+        val artifact = result[0]
+        assertEquals("Demo Web App", artifact.title)
+        val fileActions = artifact.actions.filter { it is AgentAction.CreateFile }
+        assertEquals(3, fileActions.size)
+        val paths = fileActions.map { (it as AgentAction.CreateFile).path }
+        assertTrue(paths.contains("index.html"))
+        assertTrue(paths.contains("styles.css"))
+        assertTrue(paths.contains("app.js"))
+    }
+
+    @Test
+    fun `demo web app index html contains expected content`() {
+        val xml = demoWebAppXml()
+        val result = AgentActionParser.parse(xml)
+        val html = result[0].actions.filterIsInstance<AgentAction.CreateFile>()
+            .first { it.path == "index.html" }
+        assertTrue(html.content.contains("PocketCodeAgent Demo"))
+        assertTrue(html.content.contains("<!DOCTYPE html>"))
+        assertTrue(html.content.contains("counterBtn"))
+    }
+
+    @Test
+    fun `demo web app styles css contains dark theme`() {
+        val xml = demoWebAppXml()
+        val result = AgentActionParser.parse(xml)
+        val css = result[0].actions.filterIsInstance<AgentAction.CreateFile>()
+            .first { it.path == "styles.css" }
+        assertTrue(css.content.contains("background: #0e0e10"))
+        assertTrue(css.content.contains("#5e72e4"))
+        assertTrue(css.content.contains("font-family"))
+    }
+
+    @Test
+    fun `demo web app js contains click counter logic`() {
+        val xml = demoWebAppXml()
+        val result = AgentActionParser.parse(xml)
+        val js = result[0].actions.filterIsInstance<AgentAction.CreateFile>()
+            .first { it.path == "app.js" }
+        assertTrue(js.content.contains("addEventListener"))
+        assertTrue(js.content.contains("counterBtn"))
+        assertTrue(js.content.contains("count"))
+    }
+
+    @Test
+    fun `demo web app contains note with preview hint`() {
+        val xml = demoWebAppXml()
+        val result = AgentActionParser.parse(xml)
+        val note = result[0].actions.filterIsInstance<AgentAction.Note>()
+            .firstOrNull { it.text.contains("Preview") }
+        assertNotNull(note)
+        assertTrue(note!!.text.contains("Preview-Tab"))
+    }
+
+    @Test
+    fun `demo web app response has no blocked path warnings`() {
+        val xml = demoWebAppXml()
+        val result = AgentActionParser.parse(xml)
+        assertTrue(result[0].parseWarnings.isEmpty())
+    }
+
+    // ── Demo helper: generates same XML as AgentRepository.demoWebAppResponse ─
+    companion object {
+        private fun demoWebAppXml(): String {
+            val html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PocketCodeAgent Demo</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>PocketCodeAgent Demo</h1>
+      <p class="subtitle">Offline Preview — Build Mode Active</p>
+    </header>
+    <main>
+      <div class="card">
+        <h2>Demo Web App</h2>
+        <p>Diese Seite wurde vom Demo-Agenten erstellt.</p>
+        <button id="counterBtn" class="btn">Klicks: <span id="count">0</span></button>
+        <p id="status" class="status">Bereit.</p>
+      </div>
+    </main>
+    <footer>
+      <p>PocketCodeAgent · Offline Demo · Keine echte API</p>
+    </footer>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>"""
+            val css = """* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: sans-serif; background: #0e0e10; color: #f8f9fe; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
+.card { background: #18181c; border-radius: 12px; padding: 28px; }
+.btn { background: #5e72e4; color: #fff; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 600; }
+"""
+            val js = """document.addEventListener('DOMContentLoaded', function() { var count = 0; var btn = document.getElementById('counterBtn'); btn.addEventListener('click', function() { count++; document.getElementById('count').textContent = count; }); });"""
+
+            return """<pocketArtifact title="Demo Web App">
+<pocketAction type="file" filePath="index.html">
+${html}
+</pocketAction>
+<pocketAction type="file" filePath="styles.css">
+${css}
+</pocketAction>
+<pocketAction type="file" filePath="app.js">
+${js}
+</pocketAction>
+<pocketAction type="note">
+Demo-Web-App erstellt. Vorschau: Wechsle zum Preview-Tab.
+</pocketAction>
+</pocketArtifact>"""
+        }
+    }
 }

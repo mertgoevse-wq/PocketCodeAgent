@@ -74,6 +74,37 @@ class AgentRepository(
     ) = flow {
         if (provider.id == 999) {
             // Simulated demo agent run
+            val lastUserMsg = history.lastOrNull { !it.isAgent }?.message?.lowercase().orEmpty()
+            val isWebAppBuild = agentMode == AgentMode.BUILD && lastUserMsg.containsAny(
+                "web app", "html", "test", "preview", "landing page", "static", "website", "webseite"
+            )
+
+            if (isWebAppBuild) {
+                val mockChunks = demoWebAppResponse()
+                var fullText = ""
+                for (chunk in mockChunks) {
+                    kotlinx.coroutines.delay(60)
+                    onChunk(chunk)
+                    fullText += chunk
+                }
+                val artifacts = artifactsFor(fullText, agentMode)
+                val proposedPatches = actionsToPatches(artifacts.flatMap { it.actions })
+                val proposedCommands = actionsToCommands(artifacts.flatMap { it.actions })
+                val displayedMessage = displayMessageFor(fullText, artifacts)
+                emit(
+                    ChatMessage(
+                        sender = "${role.displayName} (Demo)",
+                        message = "[Demo-Agent — Offline demo, keine echte API.]\n\n$displayedMessage",
+                        isAgent = true,
+                        agentRole = role,
+                        proposedPatches = proposedPatches,
+                        proposedCommands = proposedCommands,
+                        artifacts = artifacts
+                    )
+                )
+                return@flow
+            }
+
             val mockChunks = when(role) {
                 AgentRole.PLANNER -> listOf(
                     "### 📋 Demo-Ausführungsplan\n\n",
@@ -394,5 +425,186 @@ class AgentRepository(
             )
         }
         return commands
+    }
+
+    // ─── Demo Web App Response ────────────────────────────────────────────────
+
+    private fun demoWebAppResponse(): List<String> {
+        val html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PocketCodeAgent Demo</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>PocketCodeAgent Demo</h1>
+      <p class="subtitle">Offline Preview — Build Mode Active</p>
+    </header>
+    <main>
+      <div class="card">
+        <h2>Demo Web App</h2>
+        <p>Diese Seite wurde vom Demo-Agenten erstellt.</p>
+        <button id="counterBtn" class="btn">Klicks: <span id="count">0</span></button>
+        <p id="status" class="status">Bereit.</p>
+      </div>
+    </main>
+    <footer>
+      <p>PocketCodeAgent · Offline Demo · Keine echte API</p>
+    </footer>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>"""
+
+        val css = """* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #0e0e10;
+  color: #f8f9fe;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.container {
+  max-width: 480px;
+  width: 100%;
+  padding: 24px;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+header h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #5e72e4;
+  letter-spacing: -0.5px;
+}
+
+.subtitle {
+  font-size: 0.8rem;
+  color: #666670;
+  margin-top: 4px;
+}
+
+.card {
+  background: #18181c;
+  border-radius: 12px;
+  padding: 28px;
+  text-align: center;
+  border: 1px solid #2d2d34;
+}
+
+.card h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.card p {
+  font-size: 0.85rem;
+  color: #adb5bd;
+  margin-bottom: 16px;
+}
+
+.btn {
+  background: #5e72e4;
+  color: #fff;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  min-width: 160px;
+}
+
+.btn:hover {
+  background: #4a5ecc;
+}
+
+.btn:active {
+  background: #3d4fad;
+  transform: scale(0.98);
+}
+
+.status {
+  font-size: 0.75rem;
+  color: #2dce89;
+  margin-top: 12px;
+  font-weight: 500;
+}
+
+footer {
+  text-align: center;
+  margin-top: 32px;
+  font-size: 0.7rem;
+  color: #444450;
+}
+"""
+
+        val js = """document.addEventListener('DOMContentLoaded', function() {
+  var count = 0;
+  var btn = document.getElementById('counterBtn');
+  var countSpan = document.getElementById('count');
+  var statusEl = document.getElementById('status');
+
+  btn.addEventListener('click', function() {
+    count++;
+    countSpan.textContent = count;
+    if (count === 1) {
+      statusEl.textContent = 'Erster Klick!';
+    } else if (count === 5) {
+      statusEl.textContent = 'Fuenf Klicks — Preview funktioniert!';
+    } else if (count === 10) {
+      statusEl.textContent = 'Zehn Klicks! Demo Mode aktiv.';
+    } else {
+      statusEl.textContent = 'Klicks: ' + count;
+    }
+  });
+});
+"""
+
+        val xml = """<pocketArtifact title="Demo Web App">
+<pocketAction type="file" filePath="index.html">
+${html}
+</pocketAction>
+<pocketAction type="file" filePath="styles.css">
+${css}
+</pocketAction>
+<pocketAction type="file" filePath="app.js">
+${js}
+</pocketAction>
+<pocketAction type="note">
+Demo-Web-App erstellt mit index.html, styles.css und app.js.
+
+Vorschau: Wechsle zum Preview-Tab und waehle Workspace Preview.
+
+Optional (nur als Vorschlag): Falls Termux installiert ist, kannst du einen Dev-Server starten:
+  cd zum Workspace-Ordner und fuehre 'npm run dev' oder 'npx serve .' aus.
+  Keine automatische Ausfuehrung — nur manuell im Terminal-Tab.
+</pocketAction>
+</pocketArtifact>"""
+
+        // Return as chunks for streaming simulation
+        return xml.chunked(80) + listOf("")
+    }
+
+    private fun String.containsAny(vararg keywords: String): Boolean {
+        return keywords.any { this.contains(it, ignoreCase = true) }
     }
 }
