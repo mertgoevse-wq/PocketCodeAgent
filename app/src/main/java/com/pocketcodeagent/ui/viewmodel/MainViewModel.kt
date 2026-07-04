@@ -42,6 +42,7 @@ class MainViewModel(
     var selectedWorkspaceName by mutableStateOf<String?>(null)
 
     var selectedProvider by mutableStateOf<Provider?>(null)
+    var pendingRestoreProviderId by mutableStateOf<Int?>(null)
 
     val isDemoMode: Boolean get() = selectedProvider?.id == 999
 
@@ -128,6 +129,11 @@ class MainViewModel(
         selectedFileRelativePath = session.activeFileName
         pendingFileChanges = sessionRepository.loadPendingPatches(session.id)
         currentDiffFileIndex = 0
+
+        // Queue provider restore — will be resolved when providers are loaded by ProviderViewModel
+        if (selectedProvider == null && session.selectedProviderId != null && session.selectedProviderId != 999) {
+            pendingRestoreProviderId = session.selectedProviderId
+        }
 
         if (!session.workspaceUri.isNullOrBlank()) {
             currentScreen = "shell"

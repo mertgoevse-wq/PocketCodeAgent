@@ -69,6 +69,16 @@ fun MainShellScreen(
 
     LaunchedEffect(providers) {
         val selected = mainViewModel.selectedProvider
+
+        // Restore provider from session if pending
+        val pendingId = mainViewModel.pendingRestoreProviderId
+        if (selected == null && pendingId != null && providers.isNotEmpty()) {
+            providers.firstOrNull { it.id == pendingId }?.let { restored ->
+                mainViewModel.selectedProvider = restored
+                mainViewModel.pendingRestoreProviderId = null
+            }
+        }
+
         if (selected != null) {
             val latest = providers.firstOrNull { it.id == selected.id }
             if (latest != null) {
