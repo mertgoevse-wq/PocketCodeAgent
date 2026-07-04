@@ -21,6 +21,11 @@ import com.pocketcodeagent.domain.security.SensitiveActionGuard
 import com.pocketcodeagent.ui.shell.AppTab
 import com.pocketcodeagent.ui.theme.PcaThemeMode
 import com.pocketcodeagent.domain.language.LanguageMode
+import com.pocketcodeagent.domain.mcp.McpConnectorRepository
+import com.pocketcodeagent.domain.mcp.McpConnectionState
+import com.pocketcodeagent.domain.mcp.McpPermissionPolicy
+import com.pocketcodeagent.domain.mcp.McpServerConfig
+import com.pocketcodeagent.domain.mcp.McpTransportType
 import kotlinx.coroutines.launch
 
 enum class AgentStatus(val label: String) {
@@ -37,7 +42,8 @@ enum class AgentStatus(val label: String) {
 
 class MainViewModel(
     private val sessionRepository: SessionRepository,
-    val ownerSecurityManager: OwnerSecurityManager
+    val ownerSecurityManager: OwnerSecurityManager,
+    val mcpRepository: McpConnectorRepository = McpConnectorRepository()
 ) : ViewModel() {
     var currentScreen by mutableStateOf("welcome")
     var selectedWorkspaceUri by mutableStateOf<String?>(null)
@@ -89,6 +95,31 @@ class MainViewModel(
     var compactMode by mutableStateOf(true)
     var themeMode by mutableStateOf(PcaThemeMode.DarkPremium)
     var languageMode by mutableStateOf(LanguageMode.System)
+
+    // MCP Connectors
+    var mcpServers by mutableStateOf(mcpRepository.getServers())
+        private set
+
+    fun addMcpServer(config: McpServerConfig) {
+        mcpRepository.addServer(config)
+        mcpServers = mcpRepository.getServers()
+    }
+
+    fun updateMcpServer(id: String, update: (McpServerConfig) -> McpServerConfig) {
+        mcpRepository.updateServer(id, update)
+        mcpServers = mcpRepository.getServers()
+    }
+
+    fun removeMcpServer(id: String) {
+        mcpRepository.removeServer(id)
+        mcpServers = mcpRepository.getServers()
+    }
+
+    fun getMcpConnectionState(serverId: String): McpConnectionState =
+        mcpRepository.getConnectionState(serverId)
+
+    fun buildMcpAgentContext(policy: McpPermissionPolicy = McpPermissionPolicy.DEFAULT_STRICT): String =
+        mcpRepository.buildAgentContext(policy)
 
     // Share intent for file sharing (triggered from composable via LaunchedEffect)
     var shareIntent by mutableStateOf<Intent?>(null)
