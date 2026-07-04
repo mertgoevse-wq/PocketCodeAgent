@@ -83,6 +83,9 @@ class MainViewModel(
     // Workspace preview ready hint (set when index.html is created/modified via diff apply)
     var workspacePreviewReady by mutableStateOf(false)
 
+    // Compact mode for one-hand mobile UX
+    var compactMode by mutableStateOf(true)
+
     // Share intent for file sharing (triggered from composable via LaunchedEffect)
     var shareIntent by mutableStateOf<Intent?>(null)
 
@@ -148,6 +151,10 @@ class MainViewModel(
 
     fun clearSessionRestoreNotice() {
         sessionRestoreNotice = null
+    }
+
+    fun toggleCompactMode() {
+        compactMode = !compactMode
     }
 
     fun setPreviewTarget(target: PreviewTarget) {

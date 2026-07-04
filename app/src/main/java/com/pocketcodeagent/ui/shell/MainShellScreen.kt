@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.ui.platform.LocalContext
@@ -190,6 +192,7 @@ fun MainShellScreen(
                     isExecuting = agentViewModel.isExecuting,
                     isTesting = providerViewModel.isTesting &&
                         providerViewModel.testingProviderId == mainViewModel.selectedProvider?.id,
+                    isCompact = mainViewModel.compactMode,
                     onProviderSelected = { 
                         mainViewModel.selectedProvider = it
                         mainViewModel.persistSelectedProvider(it)
@@ -245,6 +248,7 @@ fun MainShellScreen(
                     pendingChanges = mainViewModel.pendingFileChanges,
                     activeFileName = mainViewModel.selectedFileName,
                     previewTarget = mainViewModel.activePreviewTarget,
+                    isCompact = mainViewModel.compactMode,
                     onReviewDiff = { patches ->
                         mainViewModel.openDiff(patches)
                     },
@@ -444,6 +448,8 @@ fun MainShellScreen(
                 onResetWorkspace = { mainViewModel.showOwnerSettings = false },
                 onClearLogs = { agentViewModel.clearLogs(); mainViewModel.showOwnerSettings = false },
                 onBackClick = { mainViewModel.showOwnerSettings = false },
+                compactMode = mainViewModel.compactMode,
+                onToggleCompactMode = { mainViewModel.toggleCompactMode() },
                 onOpenChat = { mainViewModel.showOwnerSettings = false; mainViewModel.activeTab = AppTab.CHAT },
                 onOpenFiles = { mainViewModel.showOwnerSettings = false; mainViewModel.activeTab = AppTab.FILES },
                 onOpenDiff = { mainViewModel.showOwnerSettings = false; mainViewModel.openDiff() },
@@ -512,6 +518,7 @@ private fun ProviderModelBar(
     provider: Provider?,
     isExecuting: Boolean,
     isTesting: Boolean,
+    isCompact: Boolean = false,
     onProviderSelected: (Provider) -> Unit,
     onModelSelected: (Provider, String) -> Unit,
     onTestClick: () -> Unit,
@@ -536,31 +543,34 @@ private fun ProviderModelBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color(0xFF13131A))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .then(if (isCompact) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
+            .padding(horizontal = if (isCompact) 6.dp else 12.dp, vertical = if (isCompact) 3.dp else 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(if (isCompact) 3.dp else 8.dp)
     ) {
         Box {
             Surface(
                 color = Color(0xFF1E1E26),
-                shape = RoundedCornerShape(6.dp),
+                shape = RoundedCornerShape(if (isCompact) 4.dp else 6.dp),
                 onClick = { providerMenuExpanded = true },
-                modifier = Modifier.widthIn(min = 96.dp, max = 132.dp)
+                modifier = Modifier.widthIn(min = if (isCompact) 72.dp else 96.dp, max = 132.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = if (isCompact) 5.dp else 8.dp, vertical = if (isCompact) 3.dp else 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Api, null, tint = SlateBlue, modifier = Modifier.size(12.dp))
-                    Spacer(Modifier.width(5.dp))
+                    if (!isCompact) {
+                        Icon(Icons.Default.Api, null, tint = SlateBlue, modifier = Modifier.size(12.dp))
+                        Spacer(Modifier.width(5.dp))
+                    }
                     Text(
                         text = provider?.name ?: "Provider",
                         color = if (provider != null) TextPrimary else TextSecondary,
-                        fontSize = 11.sp,
+                        fontSize = if (isCompact) 10.sp else 11.sp,
                         maxLines = 1,
                         modifier = Modifier.weight(1f, fill = false)
                     )
-                    Icon(Icons.Default.KeyboardArrowDown, null, tint = TextSecondary, modifier = Modifier.size(13.dp))
+                    Icon(Icons.Default.KeyboardArrowDown, null, tint = TextSecondary, modifier = Modifier.size(if (isCompact) 10.dp else 13.dp))
                 }
             }
             DropdownMenu(
@@ -590,27 +600,29 @@ private fun ProviderModelBar(
             }
         }
 
-        Box(modifier = Modifier.weight(1f)) {
+        Box(modifier = if (isCompact) Modifier.widthIn(min = 80.dp, max = 160.dp) else Modifier.weight(1f)) {
             Surface(
                 color = Color(0xFF1E1E26),
-                shape = RoundedCornerShape(6.dp),
+                shape = RoundedCornerShape(if (isCompact) 4.dp else 6.dp),
                 onClick = { if (provider != null) modelMenuExpanded = true },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = if (isCompact) 5.dp else 8.dp, vertical = if (isCompact) 3.dp else 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Psychology, null, tint = CalmSage, modifier = Modifier.size(12.dp))
-                    Spacer(Modifier.width(5.dp))
+                    if (!isCompact) {
+                        Icon(Icons.Default.Psychology, null, tint = CalmSage, modifier = Modifier.size(12.dp))
+                        Spacer(Modifier.width(5.dp))
+                    }
                     Text(
                         text = provider?.modelName ?: "Modell",
                         color = if (provider != null) TextPrimary else TextSecondary,
-                        fontSize = 11.sp,
+                        fontSize = if (isCompact) 10.sp else 11.sp,
                         maxLines = 1,
                         modifier = Modifier.weight(1f)
                     )
-                    Icon(Icons.Default.KeyboardArrowDown, null, tint = TextSecondary, modifier = Modifier.size(13.dp))
+                    Icon(Icons.Default.KeyboardArrowDown, null, tint = TextSecondary, modifier = Modifier.size(if (isCompact) 10.dp else 13.dp))
                 }
             }
             DropdownMenu(
@@ -640,30 +652,30 @@ private fun ProviderModelBar(
             }
         }
 
-        ProviderStatusPill(status, isDemo = isDemo)
+        ProviderStatusPill(status, isDemo = isDemo, isCompact = isCompact)
 
         if (!isDemo) {
             IconButton(
                 onClick = onTestClick,
                 enabled = !isExecuting && !isTesting && provider?.hasRequiredConfiguration() == true,
-                modifier = Modifier.size(30.dp)
+                modifier = Modifier.size(if (isCompact) 24.dp else 30.dp)
             ) {
                 if (isTesting) {
-                    CircularProgressIndicator(modifier = Modifier.size(14.dp), color = SlateBlue, strokeWidth = 2.dp)
+                    CircularProgressIndicator(modifier = Modifier.size(if (isCompact) 12.dp else 14.dp), color = SlateBlue, strokeWidth = 2.dp)
                 } else {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "Test provider", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.PlayArrow, contentDescription = "Test provider", tint = TextSecondary, modifier = Modifier.size(if (isCompact) 13.dp else 16.dp))
                 }
             }
         }
 
-        IconButton(onClick = onSettingsClick, modifier = Modifier.size(30.dp)) {
-            Icon(Icons.Default.Settings, contentDescription = "Provider settings", tint = TextSecondary, modifier = Modifier.size(16.dp))
+        IconButton(onClick = onSettingsClick, modifier = Modifier.size(if (isCompact) 24.dp else 30.dp)) {
+            Icon(Icons.Default.Settings, contentDescription = "Provider settings", tint = TextSecondary, modifier = Modifier.size(if (isCompact) 13.dp else 16.dp))
         }
     }
 }
 
 @Composable
-private fun ProviderStatusPill(status: ProviderTestStatus, isDemo: Boolean = false) {
+private fun ProviderStatusPill(status: ProviderTestStatus, isDemo: Boolean = false, isCompact: Boolean = false) {
     val color = when {
         isDemo -> SlateBlue
         status == ProviderTestStatus.READY -> CalmSage
@@ -674,22 +686,22 @@ private fun ProviderStatusPill(status: ProviderTestStatus, isDemo: Boolean = fal
     val label = if (isDemo) "Offline demo" else status.label
     Surface(
         color = color.copy(alpha = 0.13f),
-        shape = RoundedCornerShape(6.dp)
+        shape = RoundedCornerShape(if (isCompact) 4.dp else 6.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = if (isCompact) 4.dp else 7.dp, vertical = if (isCompact) 3.dp else 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(6.dp)
+                    .size(if (isCompact) 4.dp else 6.dp)
                     .background(color, shape = RoundedCornerShape(3.dp))
             )
-            Spacer(Modifier.width(4.dp))
+            if (!isCompact) Spacer(Modifier.width(2.dp)) else Spacer(Modifier.width(2.dp))
             Text(
                 label,
                 color = color,
-                fontSize = 10.sp,
+                fontSize = if (isCompact) 9.sp else 10.sp,
                 maxLines = 1
             )
         }

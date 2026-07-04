@@ -54,6 +54,7 @@ fun ChatPanel(
     pendingChanges: List<FilePatch>,
     activeFileName: String?,
     previewTarget: PreviewTarget,
+    isCompact: Boolean,
     onReviewDiff: (List<FilePatch>) -> Unit,
     onAddFileAction: (AgentAction) -> Unit,
     onQueueCommand: (AgentAction.RunCommand) -> Unit,
@@ -69,6 +70,7 @@ fun ChatPanel(
     var showNewSessionConfirm by remember { mutableStateOf(false) }
     var showSkillSheet by remember { mutableStateOf(false) }
     var showRoleSheet by remember { mutableStateOf(false) }
+    var showMoreSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -124,26 +126,28 @@ fun ChatPanel(
             }
         }
 
-        // ── Row A: Context Chip + New Session ─────────────────────────────
-        Row(
-            modifier = Modifier.fillMaxWidth().background(InputBg).padding(horizontal = 6.dp, vertical = 1.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            ContextChipRow(
-                context = viewModel.lastContext,
-                fileCount = viewModel.lastContextFileCount,
-                warnings = viewModel.lastContextWarnings,
-                onShowDialog = { showContextDialog = true },
-                modifier = Modifier.weight(1f)
-            )
-            TextButton(
-                onClick = { showNewSessionConfirm = true },
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+        // ── Row A: Context Chip + New Session (normal mode) ────────────
+        if (!isCompact) {
+            Row(
+                modifier = Modifier.fillMaxWidth().background(InputBg).padding(horizontal = 6.dp, vertical = 1.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Add, "New Session", tint = TextSecondary, modifier = Modifier.size(12.dp))
-                Spacer(Modifier.width(1.dp))
-                Text("New", color = TextSecondary, fontSize = 9.sp)
+                ContextChipRow(
+                    context = viewModel.lastContext,
+                    fileCount = viewModel.lastContextFileCount,
+                    warnings = viewModel.lastContextWarnings,
+                    onShowDialog = { showContextDialog = true },
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(
+                    onClick = { showNewSessionConfirm = true },
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                ) {
+                    Icon(Icons.Default.Add, "New Session", tint = TextSecondary, modifier = Modifier.size(12.dp))
+                    Spacer(Modifier.width(1.dp))
+                    Text("New", color = TextSecondary, fontSize = 9.sp)
+                }
             }
         }
 
@@ -162,43 +166,100 @@ fun ChatPanel(
                 }
             }
             val skill = viewModel.selectedSkill
-            Surface(
-                color = if (skill != null) Color(0xFF26324A) else ChipBg,
-                shape = RoundedCornerShape(4.dp),
-                onClick = { showSkillSheet = true }
-            ) {
-                Row(modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        skill?.displayName ?: "Skill",
-                        color = if (skill != null) SlateBlue else TextSecondary,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1
-                    )
-                    Spacer(Modifier.width(2.dp))
-                    Icon(Icons.Default.KeyboardArrowDown, null, tint = TextSecondary, modifier = Modifier.size(10.dp))
+            if (!isCompact) {
+                Surface(
+                    color = if (skill != null) Color(0xFF26324A) else ChipBg,
+                    shape = RoundedCornerShape(4.dp),
+                    onClick = { showSkillSheet = true }
+                ) {
+                    Row(modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            skill?.displayName ?: "Skill",
+                            color = if (skill != null) SlateBlue else TextSecondary,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
+                        )
+                        Spacer(Modifier.width(2.dp))
+                        Icon(Icons.Default.KeyboardArrowDown, null, tint = TextSecondary, modifier = Modifier.size(10.dp))
+                    }
+                }
+            } else {
+                // Compact: skill chip inline + more (...) button
+                Surface(
+                    color = if (skill != null) Color(0xFF26324A) else ChipBg,
+                    shape = RoundedCornerShape(4.dp),
+                    onClick = { showSkillSheet = true }
+                ) {
+                    Row(modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            skill?.displayName ?: "Skill",
+                            color = if (skill != null) SlateBlue else TextSecondary,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
+                        )
+                    }
+                }
+                // More button opens bottom sheet with role, skill, context, new session, apply
+                val badge = if (hasPendingChanges) pendingChanges.size else 0
+                Surface(
+                    color = if (badge > 0) CalmSage.copy(alpha = 0.2f) else ChipBg,
+                    shape = RoundedCornerShape(4.dp),
+                    onClick = { showMoreSheet = true }
+                ) {
+                    Row(modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            if (badge > 0) "$badge" else "More",
+                            color = if (badge > 0) CalmSage else TextSecondary,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Icon(Icons.Default.MoreVert, null, tint = TextSecondary, modifier = Modifier.size(10.dp))
+                    }
                 }
             }
         }
 
         // ── Row C: Role Chip + Run/Stop + Apply ───────────────────────────
+        val selectedRole = viewModel.selectedRegistryRole
         Row(
             modifier = Modifier.fillMaxWidth().background(InputBg).padding(horizontal = 6.dp, vertical = 3.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            val selectedRole = viewModel.selectedRegistryRole
-            Surface(
-                color = ChipBg,
-                shape = RoundedCornerShape(5.dp),
-                onClick = { showRoleSheet = true },
-                modifier = Modifier.weight(1f)
-            ) {
-                Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Psychology, null, tint = SlateBlue, modifier = Modifier.size(12.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(selectedRole.displayName, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f))
-                    Icon(Icons.Default.KeyboardArrowDown, null, tint = TextSecondary, modifier = Modifier.size(12.dp))
+            if (!isCompact) {
+                Surface(
+                    color = ChipBg,
+                    shape = RoundedCornerShape(5.dp),
+                    onClick = { showRoleSheet = true },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Psychology, null, tint = SlateBlue, modifier = Modifier.size(12.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(selectedRole.displayName, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f))
+                        Icon(Icons.Default.KeyboardArrowDown, null, tint = TextSecondary, modifier = Modifier.size(12.dp))
+                    }
+                }
+            } else {
+                // Compact: role as slim chip + small apply badge
+                Surface(
+                    color = ChipBg,
+                    shape = RoundedCornerShape(5.dp),
+                    onClick = { showRoleSheet = true },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Row(modifier = Modifier.padding(horizontal = 5.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Psychology, null, tint = SlateBlue, modifier = Modifier.size(10.dp))
+                        Spacer(Modifier.width(3.dp))
+                        Text(selectedRole.displayName, color = TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f))
+                        if (hasPendingChanges) {
+                            Spacer(Modifier.width(3.dp))
+                            Text("${pendingChanges.size}", color = CalmSage, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Icon(Icons.Default.KeyboardArrowDown, null, tint = TextSecondary, modifier = Modifier.size(10.dp))
+                    }
                 }
             }
 
@@ -227,7 +288,7 @@ fun ChatPanel(
                 }
             }
 
-            if (hasPendingChanges) {
+            if (!isCompact && hasPendingChanges) {
                 Surface(
                     onClick = { onReviewDiff(pendingChanges) },
                     color = CalmSage,
@@ -324,6 +385,164 @@ fun ChatPanel(
             },
             dismissButton = { TextButton(onClick = { showNewSessionConfirm = false }) { Text("Abbrechen", color = TextSecondary) } }
         )
+    }
+
+    // ── Compact More Actions BottomSheet ───────────────────────────────────
+    if (showMoreSheet) {
+        MoreActionsSheet(
+            viewModel = viewModel,
+            hasPendingChanges = hasPendingChanges,
+            pendingCount = pendingChanges.size,
+            onShowRole = { showMoreSheet = false; showRoleSheet = true },
+            onShowSkill = { showMoreSheet = false; showSkillSheet = true },
+            onShowContext = { showMoreSheet = false; showContextDialog = true },
+            onShowNewSession = { showMoreSheet = false; showNewSessionConfirm = true },
+            onShowDiff = { showMoreSheet = false; onReviewDiff(pendingChanges) },
+            onQuickRole = { role ->
+                viewModel.selectedRegistryRole = role
+                showMoreSheet = false
+            },
+            onDismiss = { showMoreSheet = false }
+        )
+    }
+}
+
+// ─── More Actions BottomSheet (Compact Mode) ─────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MoreActionsSheet(
+    viewModel: AgentViewModel,
+    hasPendingChanges: Boolean,
+    pendingCount: Int,
+    onShowRole: () -> Unit,
+    onShowSkill: () -> Unit,
+    onShowContext: () -> Unit,
+    onShowNewSession: () -> Unit,
+    onShowDiff: () -> Unit,
+    onQuickRole: (RichAgentRole) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1A1A22),
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        modifier = Modifier.fillMaxHeight(0.55f)
+    ) {
+        Column(modifier = Modifier.padding(bottom = 24.dp)) {
+            Text("Aktionen", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            HorizontalDivider(color = Color(0xFF2A2A34), thickness = 0.5.dp)
+
+            // Quick role switches
+            Text("Schnellwechsel", color = TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                val quickRoles = listOf(
+                    AgentRegistry.ALL.firstOrNull { it.id == "planner" },
+                    AgentRegistry.ALL.firstOrNull { it.id == "provider-api-engineer" },
+                    AgentRegistry.ALL.firstOrNull { it.id == "code-reviewer" },
+                    AgentRegistry.ALL.firstOrNull { it.id == "debugger" }
+                ).filterNotNull()
+                quickRoles.forEach { role ->
+                    val isActive = role.id == viewModel.selectedRegistryRole.id
+                    Surface(
+                        color = if (isActive) Color(0xFF26324A) else ChipBg,
+                        shape = RoundedCornerShape(4.dp),
+                        onClick = { onQuickRole(role) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            role.displayName.take(10),
+                            color = if (isActive) SlateBlue else TextSecondary,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 6.dp),
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(color = Color(0xFF2A2A34), thickness = 0.5.dp, modifier = Modifier.padding(vertical = 4.dp))
+
+            // Role
+            MoreSheetItem(
+                icon = Icons.Default.Psychology,
+                label = "Agent-Rolle: ${viewModel.selectedRegistryRole.displayName}",
+                subtitle = "Rolle wechseln",
+                onClick = { onShowRole() }
+            )
+
+            // Skill
+            val skillName = viewModel.selectedSkill?.displayName ?: "Kein Skill"
+            MoreSheetItem(
+                icon = Icons.Default.Build,
+                label = "Skill: $skillName",
+                subtitle = "Skill auswählen",
+                onClick = { onShowSkill() }
+            )
+
+            // Context
+            val ctxFileCount = viewModel.lastContextFileCount
+            val ctxLabel = if (viewModel.lastContext != null) "Context ($ctxFileCount Files)" else "Kein Context"
+            MoreSheetItem(
+                icon = Icons.Default.Info,
+                label = ctxLabel,
+                subtitle = "Workspace-Context anzeigen",
+                onClick = { onShowContext() }
+            )
+
+            HorizontalDivider(color = Color(0xFF2A2A34), thickness = 0.5.dp, modifier = Modifier.padding(vertical = 4.dp))
+
+            // Apply pending changes
+            if (hasPendingChanges) {
+                MoreSheetItem(
+                    icon = Icons.Default.CheckCircle,
+                    label = "Änderungen anwenden ($pendingCount)",
+                    subtitle = "Pending Patches prüfen",
+                    accent = CalmSage,
+                    onClick = { onShowDiff() }
+                )
+            }
+
+            // New Session
+            MoreSheetItem(
+                icon = Icons.Default.Add,
+                label = "Neue Session",
+                subtitle = "Alle Nachrichten löschen",
+                accent = WarmCopper,
+                onClick = { onShowNewSession() }
+            )
+        }
+    }
+}
+
+@Composable
+private fun MoreSheetItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    subtitle: String,
+    accent: Color = TextPrimary,
+    onClick: () -> Unit
+) {
+    Surface(
+        color = Color.Transparent,
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, null, tint = accent, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(label, color = accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, color = TextSecondary, fontSize = 10.sp)
+            }
+            Icon(Icons.Default.KeyboardArrowRight, null, tint = TextSecondary, modifier = Modifier.size(16.dp))
+        }
     }
 }
 
@@ -437,7 +656,7 @@ private fun CompactModeChip(label: String, selected: Boolean, modifier: Modifier
         shape = RoundedCornerShape(4.dp),
         modifier = modifier
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 5.dp)) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 8.dp)) {
             Text(label, color = if (selected) TextPrimary else TextSecondary, fontSize = 10.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
         }
     }

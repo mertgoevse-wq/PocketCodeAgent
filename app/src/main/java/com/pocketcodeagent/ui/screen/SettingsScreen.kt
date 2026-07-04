@@ -32,6 +32,8 @@ fun SettingsScreen(
     onResetWorkspace: () -> Unit,
     onClearLogs: () -> Unit,
     onBackClick: () -> Unit,
+    compactMode: Boolean = false,
+    onToggleCompactMode: () -> Unit = {},
     onOpenChat: () -> Unit = {},
     onOpenFiles: () -> Unit = {},
     onOpenDiff: () -> Unit = {},
@@ -233,6 +235,41 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            // ── UI Preferences ────────────────────────────────────────────────
+            Text("UI Preferences", style = MaterialTheme.typography.titleSmall, color = TextPrimary, fontWeight = FontWeight.Bold)
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF15151A)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("One-Hand Compact Mode", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(
+                            "Slim controls, more chat space, advanced actions in bottom sheet.",
+                            color = TextSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Switch(
+                        checked = compactMode,
+                        onCheckedChange = { onToggleCompactMode() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = SlateBlue,
+                            checkedTrackColor = SlateBlue.copy(alpha = 0.3f),
+                            uncheckedThumbColor = Color(0xFF555560),
+                            uncheckedTrackColor = Color(0xFF2A2A34)
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // ── Global Controls ───────────────────────────────────────────────
             Text("Global Controls", style = MaterialTheme.typography.titleSmall, color = TextPrimary, fontWeight = FontWeight.Bold)
