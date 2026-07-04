@@ -24,6 +24,7 @@ import com.pocketcodeagent.domain.security.EmergencyStopState
 import com.pocketcodeagent.domain.security.OwnerAuthState
 import com.pocketcodeagent.domain.security.OwnerSecurityManager
 import com.pocketcodeagent.ui.theme.*
+import com.pocketcodeagent.ui.theme.PcaThemeMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,6 +35,8 @@ fun SettingsScreen(
     onBackClick: () -> Unit,
     compactMode: Boolean = false,
     onToggleCompactMode: () -> Unit = {},
+    themeMode: PcaThemeMode = PcaThemeMode.DarkPremium,
+    onThemeModeSelected: (PcaThemeMode) -> Unit = {},
     onOpenChat: () -> Unit = {},
     onOpenFiles: () -> Unit = {},
     onOpenDiff: () -> Unit = {},
@@ -235,6 +238,43 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            // ── Appearance ───────────────────────────────────────────────────
+            Text("Appearance", style = MaterialTheme.typography.titleSmall, color = TextPrimary, fontWeight = FontWeight.Bold)
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF15151A)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Theme", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+
+                    PcaThemeMode.entries.forEach { mode ->
+                        val isSelected = mode == themeMode
+                        Surface(
+                            color = if (isSelected) SlateBlue.copy(alpha = 0.15f) else Color(0xFF1E1E28),
+                            shape = RoundedCornerShape(6.dp),
+                            onClick = { onThemeModeSelected(mode) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(mode.label, color = if (isSelected) SlateBlue else TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                    Text(mode.description, color = TextSecondary, fontSize = 10.sp)
+                                }
+                                if (isSelected) {
+                                    Icon(Icons.Default.Check, null, tint = SlateBlue, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // ── UI Preferences ────────────────────────────────────────────────
             Text("UI Preferences", style = MaterialTheme.typography.titleSmall, color = TextPrimary, fontWeight = FontWeight.Bold)

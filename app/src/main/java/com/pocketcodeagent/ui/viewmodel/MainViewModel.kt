@@ -19,6 +19,7 @@ import com.pocketcodeagent.domain.security.OwnerSecurityManager
 import com.pocketcodeagent.domain.security.SensitiveAction
 import com.pocketcodeagent.domain.security.SensitiveActionGuard
 import com.pocketcodeagent.ui.shell.AppTab
+import com.pocketcodeagent.ui.theme.PcaThemeMode
 import kotlinx.coroutines.launch
 
 enum class AgentStatus(val label: String) {
@@ -85,6 +86,7 @@ class MainViewModel(
 
     // Compact mode for one-hand mobile UX
     var compactMode by mutableStateOf(true)
+    var themeMode by mutableStateOf(PcaThemeMode.DarkPremium)
 
     // Share intent for file sharing (triggered from composable via LaunchedEffect)
     var shareIntent by mutableStateOf<Intent?>(null)

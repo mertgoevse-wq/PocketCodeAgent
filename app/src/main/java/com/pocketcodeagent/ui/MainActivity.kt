@@ -52,7 +52,7 @@ class MainActivity : ComponentActivity() {
         val agentViewModel = AgentViewModel(agentRepo, providerRepo, sessionRepo, ownerSecurityManager)
 
         setContent {
-            PocketCodeAgentTheme {
+            PocketCodeAgentTheme(themeMode = mainViewModel.themeMode) {
                 // Folder picker launcher
                 val folderPickerLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.OpenDocumentTree()

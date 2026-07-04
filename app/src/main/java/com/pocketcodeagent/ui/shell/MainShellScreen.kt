@@ -450,6 +450,8 @@ fun MainShellScreen(
                 onBackClick = { mainViewModel.showOwnerSettings = false },
                 compactMode = mainViewModel.compactMode,
                 onToggleCompactMode = { mainViewModel.toggleCompactMode() },
+                themeMode = mainViewModel.themeMode,
+                onThemeModeSelected = { mainViewModel.themeMode = it },
                 onOpenChat = { mainViewModel.showOwnerSettings = false; mainViewModel.activeTab = AppTab.CHAT },
                 onOpenFiles = { mainViewModel.showOwnerSettings = false; mainViewModel.activeTab = AppTab.FILES },
                 onOpenDiff = { mainViewModel.showOwnerSettings = false; mainViewModel.openDiff() },
