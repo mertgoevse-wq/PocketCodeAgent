@@ -1,15 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">PocketCodeAgent</string>
-
-    <!-- Welcome -->
     <string name="welcome_title">PocketCodeAgent</string>
     <string name="welcome_subtitle">Mobile Coding Agent für Android ohne Root</string>
     <string name="welcome_description">Eine mobile Entwicklungsumgebung mit autonomen KI-Agenten. Schreibe, bearbeite und teste Projekte überall – ohne Root-Rechte.</string>
     <string name="get_started">Los geht\'s</string>
     <string name="start_demo_mode">Demo Mode starten</string>
-
-    <!-- Provider -->
     <string name="provider_settings">Provider Settings</string>
     <string name="add_provider">Provider hinzufügen</string>
     <string name="configured_providers">Konfigurierte Provider</string>
@@ -23,20 +19,14 @@
     <string name="cancel">Abbrechen</string>
     <string name="delete">Löschen</string>
     <string name="continue_label">Weiter</string>
-
-    <!-- Workspace -->
     <string name="select_workspace">Workspace öffnen …</string>
     <string name="no_workspace">No workspace</string>
-
-    <!-- Tabs -->
     <string name="tab_chat">Chat</string>
     <string name="tab_files">Files</string>
     <string name="tab_code">Code</string>
     <string name="tab_diff">Diff</string>
     <string name="tab_preview">Preview</string>
     <string name="tab_terminal">Terminal</string>
-
-    <!-- Chat -->
     <string name="demo_mode">Demo Mode</string>
     <string name="demo_badge">Demo — keine echte API</string>
     <string name="demo_offline">Offline demo</string>
@@ -50,29 +40,17 @@
     <string name="new_session">Neue Session</string>
     <string name="more">More</string>
     <string name="send">Send</string>
-
-    <!-- Files -->
     <string name="files_empty">Verzeichnis ist leer.</string>
     <string name="no_file_open">Keine Datei geöffnet</string>
-
-    <!-- Diff -->
     <string name="no_pending_changes">Keine ausstehenden Änderungen</string>
-
-    <!-- Preview -->
     <string name="no_preview_loaded">Keine Preview geladen</string>
     <string name="load_workspace_preview">Load Workspace Preview</string>
-
-    <!-- Terminal -->
     <string name="no_commands_suggested">Keine Commands vorgeschlagen</string>
-
-    <!-- Settings -->
     <string name="settings">Settings</string>
     <string name="language_section">Sprache</string>
     <string name="language_system_desc">Folgt Android System-Einstellung</string>
     <string name="language_german_desc">Deutsch</string>
     <string name="language_english_desc">English</string>
     <string name="language_restart_hint">Sprachänderung wird nach App-Neustart wirksam.</string>
-
-    <!-- Emergency Stop -->
     <string name="emergency_stop">Emergency Stop</string>
 </resources>

@@ -16,6 +16,7 @@ import com.pocketcodeagent.data.repository.AgentRepository
 import com.pocketcodeagent.data.repository.ProviderRepository
 import com.pocketcodeagent.data.repository.SessionRepository
 import com.pocketcodeagent.data.repository.WorkspaceRepository
+import com.pocketcodeagent.domain.language.LanguageMode
 import com.pocketcodeagent.domain.security.OwnerSecurityManager
 import com.pocketcodeagent.ui.screen.*
 import com.pocketcodeagent.ui.shell.MainShellScreen
@@ -25,6 +26,7 @@ import com.pocketcodeagent.ui.viewmodel.AgentViewModel
 import com.pocketcodeagent.ui.viewmodel.MainViewModel
 import com.pocketcodeagent.ui.viewmodel.ProviderViewModel
 import com.pocketcodeagent.ui.viewmodel.WorkspaceViewModel
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
 
@@ -32,6 +34,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        applyStoredLocale()
 
         // 1. Initialize local Room database
         val database = AppDatabase.getDatabase(applicationContext)
@@ -47,6 +51,13 @@ class MainActivity : ComponentActivity() {
 
         // 4. Create view models
         val mainViewModel = MainViewModel(sessionRepo, ownerSecurityManager)
+        // Restore persisted language choice
+        val prefs = getSharedPreferences("pca_prefs", MODE_PRIVATE)
+        val savedLangTag = prefs.getString("language_mode", null)
+        if (savedLangTag != null) {
+            mainViewModel.languageMode = LanguageMode.entries.firstOrNull { it.localeTag == savedLangTag }
+                ?: LanguageMode.System
+        }
         val providerViewModel = ProviderViewModel(providerRepo)
         val workspaceViewModel = WorkspaceViewModel(workspaceRepo)
         val agentViewModel = AgentViewModel(agentRepo, providerRepo, sessionRepo, ownerSecurityManager)
@@ -123,6 +134,28 @@ class MainActivity : ComponentActivity() {
         super.onPause()
         if (::ownerSecurityManager.isInitialized) {
             ownerSecurityManager.onActivityPaused()
+        }
+    }
+
+    private fun applyStoredLocale() {
+        val prefs = getSharedPreferences("pca_prefs", MODE_PRIVATE)
+        val langTag = prefs.getString("language_mode", null) ?: return
+        val locale = Locale.forLanguageTag(langTag)
+        Locale.setDefault(locale)
+        val config = resources.configuration
+        config.setLocale(locale)
+        resources.updateConfiguration(config, resources.displayMetrics)
+    }
+
+    companion object {
+        const val PREFS_NAME = "pca_prefs"
+        const val KEY_LANGUAGE_MODE = "language_mode"
+
+        fun saveLanguageMode(context: android.content.Context, mode: LanguageMode) {
+            context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_LANGUAGE_MODE, mode.localeTag)
+                .apply()
         }
     }
 }

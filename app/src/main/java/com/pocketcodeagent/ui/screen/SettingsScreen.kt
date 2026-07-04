@@ -25,6 +25,7 @@ import com.pocketcodeagent.domain.security.OwnerAuthState
 import com.pocketcodeagent.domain.security.OwnerSecurityManager
 import com.pocketcodeagent.ui.theme.*
 import com.pocketcodeagent.ui.theme.PcaThemeMode
+import com.pocketcodeagent.domain.language.LanguageMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,6 +38,8 @@ fun SettingsScreen(
     onToggleCompactMode: () -> Unit = {},
     themeMode: PcaThemeMode = PcaThemeMode.DarkPremium,
     onThemeModeSelected: (PcaThemeMode) -> Unit = {},
+    languageMode: LanguageMode = LanguageMode.System,
+    onLanguageModeSelected: (LanguageMode) -> Unit = {},
     onOpenChat: () -> Unit = {},
     onOpenFiles: () -> Unit = {},
     onOpenDiff: () -> Unit = {},
@@ -238,6 +241,47 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            // ── Language ──────────────────────────────────────────────────────
+            Text("Sprache", style = MaterialTheme.typography.titleSmall, color = TextPrimary, fontWeight = FontWeight.Bold)
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF15151A)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LanguageMode.entries.forEach { mode ->
+                        val isSelected = mode == languageMode
+                        Surface(
+                            color = if (isSelected) SlateBlue.copy(alpha = 0.15f) else Color(0xFF1E1E28),
+                            shape = RoundedCornerShape(6.dp),
+                            onClick = { onLanguageModeSelected(mode) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(mode.label, color = if (isSelected) SlateBlue else TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                    val desc = when (mode) {
+                                        LanguageMode.System -> "Folgt Android System-Einstellung"
+                                        LanguageMode.German -> "Deutsch"
+                                        LanguageMode.English -> "English"
+                                    }
+                                    Text(desc, color = TextSecondary, fontSize = 10.sp)
+                                }
+                                if (isSelected) {
+                                    Icon(Icons.Default.Check, null, tint = SlateBlue, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+                    Text("Sprachänderung wird nach App-Neustart wirksam.", color = Color(0xFF777783), fontSize = 10.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // ── Appearance ───────────────────────────────────────────────────
             Text("Appearance", style = MaterialTheme.typography.titleSmall, color = TextPrimary, fontWeight = FontWeight.Bold)

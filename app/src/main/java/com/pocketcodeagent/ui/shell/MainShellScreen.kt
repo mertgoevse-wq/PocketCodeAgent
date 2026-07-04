@@ -452,6 +452,11 @@ fun MainShellScreen(
                 onToggleCompactMode = { mainViewModel.toggleCompactMode() },
                 themeMode = mainViewModel.themeMode,
                 onThemeModeSelected = { mainViewModel.themeMode = it },
+                languageMode = mainViewModel.languageMode,
+                onLanguageModeSelected = { mode ->
+                    mainViewModel.languageMode = mode
+                    com.pocketcodeagent.ui.MainActivity.saveLanguageMode(shareContext, mode)
+                },
                 onOpenChat = { mainViewModel.showOwnerSettings = false; mainViewModel.activeTab = AppTab.CHAT },
                 onOpenFiles = { mainViewModel.showOwnerSettings = false; mainViewModel.activeTab = AppTab.FILES },
                 onOpenDiff = { mainViewModel.showOwnerSettings = false; mainViewModel.openDiff() },
