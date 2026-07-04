@@ -36,17 +36,17 @@ object WorkspacePathHelper {
     }
 
     private fun sanitizeRelativePath(path: String?): String? {
-        val normalized = path
-            ?.trim()
-            ?.replace('\\', '/')
-            ?.trim('/')
-            ?: return null
+        if (path.isNullOrBlank()) return null
+        val trimmed = path.trim()
 
+        // Check for absolute/URI prefixes BEFORE slash normalization
+        if (trimmed.startsWith("/")) return null
+        if (trimmed.startsWith("content:", ignoreCase = true)) return null
+        if (trimmed.startsWith("file:", ignoreCase = true)) return null
+        if (Regex("^[A-Za-z]:").containsMatchIn(trimmed)) return null
+
+        val normalized = trimmed.replace('\\', '/').trim('/')
         if (normalized.isBlank()) return null
-        if (normalized.startsWith("content:", ignoreCase = true)) return null
-        if (normalized.startsWith("file:", ignoreCase = true)) return null
-        if (normalized.startsWith("/")) return null
-        if (Regex("^[A-Za-z]:").containsMatchIn(normalized)) return null
 
         val parts = normalized.split("/").filter { it.isNotBlank() }
         if (parts.isEmpty()) return null

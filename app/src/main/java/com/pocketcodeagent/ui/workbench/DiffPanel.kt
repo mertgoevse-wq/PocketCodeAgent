@@ -131,11 +131,30 @@ fun DiffPanel(
         HorizontalDivider(color = BorderGrey, thickness = 0.5.dp)
 
         if (patches.isEmpty()) {
-            PanelPlaceholder(
-                icon = Icons.Default.CheckCircle,
-                title = "Keine ausstehenden Änderungen",
-                subtitle = "Der Agent hat noch keine Dateiänderungen vorgeschlagen."
-            )
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                PanelPlaceholder(
+                    icon = Icons.Default.CheckCircle,
+                    title = "Keine ausstehenden Änderungen",
+                    subtitle = "Sende einen Build-Prompt im Chat, um Dateiänderungen zu generieren."
+                )
+                Spacer(Modifier.height(16.dp))
+                OutlinedButton(
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("E2E Prompt", e2eTestPrompt))
+                        Toast.makeText(context, "Test-Prompt kopiert — jetzt in den Chat einfuegen", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = SlateBlue)
+                ) {
+                    Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Test-Prompt kopieren", fontSize = 12.sp)
+                }
+            }
             return@Column
         }
 
@@ -348,3 +367,12 @@ private fun String?.linesOrEmpty(): List<String> {
 private fun String?.lineCountOrZero(): Int {
     return linesOrEmpty().size
 }
+
+private val e2eTestPrompt = """Erstelle eine kleine statische Test-Web-App mit drei Dateien:
+index.html, styles.css und app.js.
+Dunkles Premium-Design, keine Neonfarben.
+Titel: PocketCodeAgent E2E Test.
+Button mit Klickzaehler.
+Status-Text: Preview funktioniert.
+Gib alle Aenderungen als pocketArtifact mit pocketAction type="file" aus.
+Fuehre nichts automatisch aus."""

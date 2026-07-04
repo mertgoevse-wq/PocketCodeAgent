@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -155,8 +158,11 @@ fun MainShellScreen(
     }
 
     val emergencyStop by mainViewModel.ownerSecurityManager.emergencyStop.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color(0xFF0E0E10),
         topBar = {
             Column {
@@ -332,8 +338,20 @@ fun MainShellScreen(
                                     )
                                 }
                             }
-                            mainViewModel.agentStatus = if (results.all { it.success }) AgentStatus.DONE else AgentStatus.ERROR
+                            val allSucceeded = results.all { it.success }
+                            mainViewModel.agentStatus = if (allSucceeded) AgentStatus.DONE else AgentStatus.ERROR
                             mainViewModel.selectedFileUri?.let { workspaceViewModel.loadFileContent(it) }
+                            mainViewModel.selectedWorkspaceUri?.let { workspaceViewModel.loadWorkspace(it) }
+                            // Set preview ready if index.html was affected
+                            if (allSucceeded && results.any { it.path.contains("index.html", ignoreCase = true) }) {
+                                mainViewModel.workspacePreviewReady = true
+                            }
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar(
+                                    if (allSucceeded) "Dateien geschrieben. Preview bereit."
+                                    else "Einige Dateien konnten nicht geschrieben werden."
+                                )
+                            }
                         }
                     },
                     onRejectAll = {
@@ -346,6 +364,16 @@ fun MainShellScreen(
                         workspaceViewModel.undoLastApply(root) { result ->
                             mainViewModel.agentStatus = if (result.success) AgentStatus.DONE else AgentStatus.ERROR
                             mainViewModel.selectedFileUri?.let { workspaceViewModel.loadFileContent(it) }
+                            mainViewModel.selectedWorkspaceUri?.let { workspaceViewModel.loadWorkspace(it) }
+                            if (result.success && result.restoredFiles.any { it.contains("index.html", ignoreCase = true) }) {
+                                mainViewModel.workspacePreviewReady = false
+                            }
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar(
+                                    if (result.success) "Letzte Aenderung rueckgaengig gemacht."
+                                    else result.message
+                                )
+                            }
                         }
                     },
                     onConfirmDelete = { patch ->

@@ -211,4 +211,105 @@ class AgentActionParserTest {
         val result = AgentActionParser.parse("   ")
         assertTrue(result.isEmpty())
     }
+
+    // ── E2E: 3-file artifact ────────────────────────────────────────────────
+    @Test
+    fun `E2E three file actions in one artifact`() {
+        val xml = """
+            <pocketArtifact title="Static Test Web App">
+                <pocketAction type="file" filePath="index.html">
+&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;&lt;title&gt;E2E Test&lt;/title&gt;&lt;link rel=&quot;stylesheet&quot; href=&quot;styles.css&quot;&gt;&lt;/head&gt;
+&lt;body&gt;&lt;h1&gt;Hello&lt;/h1&gt;&lt;button id=&quot;btn&quot;&gt;Click&lt;/button&gt;&lt;script src=&quot;app.js&quot;&gt;&lt;/script&gt;&lt;/body&gt;
+&lt;/html&gt;
+                </pocketAction>
+                <pocketAction type="file" filePath="styles.css">
+body { background: #0e0e10; color: #e0e0e0; font-family: sans-serif; }
+                </pocketAction>
+                <pocketAction type="file" filePath="app.js">
+let count = 0; document.getElementById('btn').onclick = () => { count++; };
+                </pocketAction>
+            </pocketArtifact>
+        """.trimIndent()
+
+        val result = AgentActionParser.parse(xml)
+        assertEquals(1, result.size)
+        val artifact = result[0]
+        assertEquals("Static Test Web App", artifact.title)
+        assertEquals(3, artifact.actions.size)
+
+        // index.html
+        val html = artifact.actions[0] as AgentAction.CreateFile
+        assertEquals("index.html", html.path)
+        assertTrue(html.content.contains("<!DOCTYPE html>"))
+        assertTrue(html.content.contains("E2E Test"))
+
+        // styles.css
+        val css = artifact.actions[1] as AgentAction.CreateFile
+        assertEquals("styles.css", css.path)
+        assertTrue(css.content.contains("background: #0e0e10"))
+        assertTrue(css.content.contains("sans-serif"))
+
+        // app.js
+        val js = artifact.actions[2] as AgentAction.CreateFile
+        assertEquals("app.js", js.path)
+        assertTrue(js.content.contains("document.getElementById"))
+        assertTrue(js.content.contains("count"))
+
+        // No warnings for normal paths
+        assertTrue(artifact.parseWarnings.isEmpty())
+    }
+
+    @Test
+    fun `E2E three files as JSON actions`() {
+        val json = """
+        {
+            "title": "E2E App",
+            "actions": [
+                {"type": "file", "path": "index.html", "content": "<html></html>"},
+                {"type": "file", "path": "styles.css", "content": "body {}"},
+                {"type": "file", "path": "app.js", "content": "console.log(1)"}
+            ]
+        }
+        """.trimIndent()
+
+        val result = AgentActionParser.parse(json)
+        assertEquals(1, result.size)
+        assertEquals(3, result[0].actions.size)
+        assertTrue(result[0].actions.all { it is AgentAction.CreateFile })
+        val paths = result[0].actions.map { (it as AgentAction.CreateFile).path }
+        assertEquals(listOf("index.html", "styles.css", "app.js"), paths)
+    }
+
+    // ── Blocked folder path warnings ──────────────────────────────────────────
+    @Test
+    fun `file action in example folder generates warning`() {
+        val xml = """<pocketArtifact title="test"><pocketAction type="file" filePath="example/test.kt">content</pocketAction></pocketArtifact>"""
+        val result = AgentActionParser.parse(xml)
+        assertEquals(1, result.size)
+        assertTrue(result[0].parseWarnings.any { it.contains("verbotenen") && it.contains("example") })
+        assertTrue(result[0].actions[0] is AgentAction.CreateFile)
+    }
+
+    @Test
+    fun `file action in sample folder generates warning`() {
+        val xml = """<pocketArtifact title="test"><pocketAction type="file" filePath="sample/app.js">content</pocketAction></pocketArtifact>"""
+        val result = AgentActionParser.parse(xml)
+        assertTrue(result[0].parseWarnings.any { it.contains("sample") })
+    }
+
+    @Test
+    fun `file action in demo folder generates warning`() {
+        val xml = """<pocketArtifact title="test"><pocketAction type="file" filePath="demo/index.html">content</pocketAction></pocketArtifact>"""
+        val result = AgentActionParser.parse(xml)
+        assertTrue(result[0].parseWarnings.any { it.contains("demo") })
+    }
+
+    @Test
+    fun `file action in playground folder generates warning`() {
+        val xml = """<pocketArtifact title="test"><pocketAction type="file" filePath="playground/test.html">content</pocketAction></pocketArtifact>"""
+        val result = AgentActionParser.parse(xml)
+        assertTrue(result[0].parseWarnings.any { it.contains("playground") })
+    }
 }

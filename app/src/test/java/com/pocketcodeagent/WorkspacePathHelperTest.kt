@@ -41,4 +41,113 @@ class WorkspacePathHelperTest {
             )
         )
     }
+
+    // ── Path safety tests ────────────────────────────────────────────────────
+    @Test
+    fun `safeRelativePath blocks dot dot traversal and falls back`() {
+        assertEquals(
+            "test.txt",
+            WorkspacePathHelper.safeRelativePath(
+                files = emptyList(), fileUri = null,
+                openFileRelativePath = "../etc/passwd",
+                fallbackFileName = "test.txt"
+            )
+        )
+    }
+
+    @Test
+    fun `safeRelativePath blocks absolute path and falls back`() {
+        assertEquals(
+            "test.txt",
+            WorkspacePathHelper.safeRelativePath(
+                files = emptyList(), fileUri = null,
+                openFileRelativePath = "/etc/passwd",
+                fallbackFileName = "test.txt"
+            )
+        )
+    }
+
+    @Test
+    fun `safeRelativePath blocks windows absolute path and falls back`() {
+        assertEquals(
+            "test.txt",
+            WorkspacePathHelper.safeRelativePath(
+                files = emptyList(), fileUri = null,
+                openFileRelativePath = "C:\\Windows\\System32",
+                fallbackFileName = "test.txt"
+            )
+        )
+    }
+
+    @Test
+    fun `safeRelativePath blocks content uri and falls back`() {
+        assertEquals(
+            "test.txt",
+            WorkspacePathHelper.safeRelativePath(
+                files = emptyList(), fileUri = null,
+                openFileRelativePath = "content://com.android/sensitive",
+                fallbackFileName = "test.txt"
+            )
+        )
+    }
+
+    @Test
+    fun `safeRelativePath allows paths with normal folder names`() {
+        assertEquals(
+            "src/components/Button.kt",
+            WorkspacePathHelper.safeRelativePath(
+                files = emptyList(), fileUri = null,
+                openFileRelativePath = "src/components/Button.kt",
+                fallbackFileName = "test.txt"
+            )
+        )
+    }
+
+    @Test
+    fun `safeRelativePath allows normal root files`() {
+        assertEquals(
+            "index.html",
+            WorkspacePathHelper.safeRelativePath(
+                files = emptyList(), fileUri = null,
+                openFileRelativePath = "index.html",
+                fallbackFileName = "test.txt"
+            )
+        )
+    }
+
+    @Test
+    fun `safeRelativePath allows normal nested files`() {
+        assertEquals(
+            "src/components/Button.kt",
+            WorkspacePathHelper.safeRelativePath(
+                files = emptyList(), fileUri = null,
+                openFileRelativePath = "src/components/Button.kt",
+                fallbackFileName = "test.txt"
+            )
+        )
+    }
+
+    @Test
+    fun `safeRelativePath allows styles css`() {
+        assertEquals(
+            "styles.css",
+            WorkspacePathHelper.safeRelativePath(
+                files = emptyList(), fileUri = null,
+                openFileRelativePath = "styles.css",
+                fallbackFileName = "test.txt"
+            )
+        )
+    }
+
+    @Test
+    fun `safeRelativePath allows app js`() {
+        assertEquals(
+            "app.js",
+            WorkspacePathHelper.safeRelativePath(
+                files = emptyList(), fileUri = null,
+                openFileRelativePath = "app.js",
+                fallbackFileName = "test.txt"
+            )
+        )
+    }
 }
