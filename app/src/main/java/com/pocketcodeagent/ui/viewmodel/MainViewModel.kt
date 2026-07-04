@@ -16,6 +16,8 @@ import com.pocketcodeagent.domain.agent.AgentAction
 import com.pocketcodeagent.domain.preview.PreviewTarget
 import com.pocketcodeagent.domain.security.EmergencyStopState
 import com.pocketcodeagent.domain.security.OwnerSecurityManager
+import com.pocketcodeagent.domain.security.SensitiveAction
+import com.pocketcodeagent.domain.security.SensitiveActionGuard
 import com.pocketcodeagent.ui.shell.AppTab
 import kotlinx.coroutines.launch
 
