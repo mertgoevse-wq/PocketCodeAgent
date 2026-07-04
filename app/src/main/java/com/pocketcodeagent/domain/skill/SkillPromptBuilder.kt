@@ -2,6 +2,7 @@ package com.pocketcodeagent.domain.skill
 
 import com.pocketcodeagent.domain.agent.AgentMode
 import com.pocketcodeagent.domain.agent.registry.RichAgentRole
+import com.pocketcodeagent.domain.context.WorkspaceContext
 
 object SkillPromptBuilder {
 
@@ -21,8 +22,7 @@ Core Rules (from AGENTS.md):
     fun build(
         skill: Skill,
         userTask: String,
-        workspaceSummary: String,
-        openFile: String?,
+        context: WorkspaceContext,
         role: RichAgentRole,
         agentMode: AgentMode
     ): String {
@@ -32,6 +32,8 @@ Core Rules (from AGENTS.md):
             AgentMode.DISCUSS -> buildDiscussInstructions()
             AgentMode.BUILD -> buildBuildInstructions()
         }
+
+        val contextString = context.toPromptString()
 
         return buildString {
             appendLine(skillRules)
@@ -46,12 +48,8 @@ Core Rules (from AGENTS.md):
             appendLine()
             appendLine(modeInstructions)
             appendLine()
-            appendLine("### Workspace Context")
-            appendLine(workspaceSummary)
-            if (openFile != null) {
-                appendLine()
-                appendLine("Currently open file: $openFile")
-            }
+            appendLine("### Workspace Context (${context.estimatedChars} chars)")
+            appendLine(contextString)
         }
     }
 

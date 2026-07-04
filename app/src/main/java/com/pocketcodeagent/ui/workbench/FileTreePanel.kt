@@ -28,7 +28,8 @@ private val FileColor   = Color(0xFFADB5BD)
 fun FileTreePanel(
     viewModel: WorkspaceViewModel,
     workspaceUriString: String?,
-    onFileClick: (String, String) -> Unit,
+    onFileClick: (String, String, String) -> Unit,
+    onExportZip: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var expandedFolders by remember { mutableStateOf(setOf<String>()) }
@@ -54,6 +55,19 @@ fun FileTreePanel(
             Spacer(Modifier.width(8.dp))
             Text("Files", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.weight(1f))
+            if (onExportZip != null) {
+                OutlinedButton(
+                    onClick = onExportZip,
+                    enabled = workspaceUriString != null && !viewModel.isExportingWorkspace,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = CalmSage),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Icon(Icons.Default.Archive, null, modifier = Modifier.size(12.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Export ZIP", fontSize = 10.sp)
+                }
+                Spacer(Modifier.width(8.dp))
+            }
             if (viewModel.isLoadingFiles) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(14.dp),
@@ -73,6 +87,11 @@ fun FileTreePanel(
         }
 
         HorizontalDivider(color = BorderGrey, thickness = 0.5.dp)
+
+        if (viewModel.isExportingWorkspace || viewModel.exportStatusMessage != null) {
+            ExportStatusRow(viewModel)
+            HorizontalDivider(color = BorderGrey, thickness = 0.5.dp)
+        }
 
         if (workspaceUriString == null) {
             PanelPlaceholder(
@@ -107,6 +126,7 @@ fun FileTreePanel(
                 FileTreeItem(
                     file = file,
                     depth = 0,
+                    path = file.name,
                     isExpanded = expandedFolders.contains(file.uriString),
                     onToggle = {
                         expandedFolders = if (expandedFolders.contains(file.uriString))
@@ -122,6 +142,7 @@ fun FileTreePanel(
                         FileTreeItem(
                             file = child,
                             depth = 1,
+                            path = "${file.name}/${child.name}",
                             isExpanded = expandedFolders.contains(child.uriString),
                             onToggle = {
                                 expandedFolders = if (expandedFolders.contains(child.uriString))
@@ -142,9 +163,10 @@ fun FileTreePanel(
 private fun FileTreeItem(
     file: WorkspaceFile,
     depth: Int,
+    path: String = file.name,
     isExpanded: Boolean,
     onToggle: () -> Unit,
-    onFileClick: (String, String) -> Unit
+    onFileClick: (String, String, String) -> Unit
 ) {
     val indent = (depth * 16).dp
     Row(
@@ -152,7 +174,7 @@ private fun FileTreeItem(
             .fillMaxWidth()
             .clickable {
                 if (file.isDirectory) onToggle()
-                else onFileClick(file.uriString, file.name)
+                else onFileClick(file.uriString, file.name, path)
             }
             .padding(start = 16.dp + indent, end = 16.dp, top = 7.dp, bottom = 7.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -179,4 +201,44 @@ private fun FileTreeItem(
         )
     }
     HorizontalDivider(color = Color(0xFF1A1A22), thickness = 0.5.dp)
+}
+
+@Composable
+private fun ExportStatusRow(viewModel: WorkspaceViewModel) {
+    val progress = viewModel.exportProgress
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF111116))
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (viewModel.isExportingWorkspace) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(13.dp),
+                color = CalmSage,
+                strokeWidth = 1.5.dp
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = progress?.let {
+                    "Export ${it.filesProcessed}/${it.filesTotal}: ${it.currentFile}"
+                } ?: "Export laeuft ...",
+                color = TextSecondary,
+                fontSize = 10.sp,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+        } else {
+            Icon(Icons.Default.CheckCircle, null, tint = CalmSage, modifier = Modifier.size(13.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = viewModel.exportStatusMessage.orEmpty(),
+                color = TextSecondary,
+                fontSize = 10.sp,
+                maxLines = 2,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
 }

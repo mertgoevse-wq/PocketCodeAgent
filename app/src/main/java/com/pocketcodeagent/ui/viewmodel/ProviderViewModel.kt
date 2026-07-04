@@ -10,14 +10,20 @@ import com.pocketcodeagent.data.model.ProviderPresets
 import com.pocketcodeagent.data.model.ProviderTestStatus
 import com.pocketcodeagent.data.model.ProviderType
 import com.pocketcodeagent.data.repository.ProviderRepository
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class ProviderViewModel(private val repository: ProviderRepository) : ViewModel() {
 
+    private val _isLoadingProviders = MutableStateFlow(true)
+    val isLoadingProvidersFlow: StateFlow<Boolean> = _isLoadingProviders
+
     val providers: StateFlow<List<Provider>> = repository.allProvidersFlow
+        .onEach { _isLoadingProviders.value = false }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     var providerType by mutableStateOf(ProviderType.OPENROUTER)

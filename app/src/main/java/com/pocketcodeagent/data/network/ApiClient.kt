@@ -1,6 +1,7 @@
 package com.pocketcodeagent.data.network
 
 import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -199,6 +200,35 @@ object ApiClient {
         return contentToString(delta?.get("content"))
             ?: contentToString(message?.get("content"))
             ?: contentToString(choice.get("text"))
+            ?: extractFromNestedOutput(choice.getAsJsonArray("output"))
+            ?: extractFromNestedContent(choice.getAsJsonArray("content"))
+    }
+
+    private fun extractFromNestedOutput(output: JsonArray?): String? {
+        if (output == null || output.size() == 0) return null
+        val first = output[0]?.asJsonObject ?: return null
+        val content = first.getAsJsonArray("content") ?: first.getAsJsonArray("parts")
+        if (content != null && content.size() > 0) {
+            return contentToString(content[0])
+        }
+        return contentToString(first.get("text"))
+            ?: contentToString(first.get("output"))
+    }
+
+    private fun extractFromNestedContent(content: JsonArray?): String? {
+        if (content == null || content.size() == 0) return null
+        var result = ""
+        for (i in 0 until content.size()) {
+            val item = content[i]
+            if (item.isJsonObject) {
+                val obj = item.asJsonObject
+                val text = contentToString(obj.get("text")) ?: contentToString(obj.get("value"))
+                if (text != null) result += text
+            } else if (item.isJsonPrimitive) {
+                result += item.asString
+            }
+        }
+        return result.takeIf { it.isNotEmpty() }
     }
 
     private fun contentToString(element: JsonElement?): String? {
@@ -224,21 +254,82 @@ object ApiClient {
             throw ProviderApiException("${providerLabel(provider)}: ${sanitizedText(message, provider)}")
         }
 
+        // Format A/B: choices[] with message/delta content
         val choices = root.getAsJsonArray("choices")
         if (choices != null && choices.size() > 0) {
             val content = extractContentFromChoice(choices[0].asJsonObject)
             if (!content.isNullOrBlank()) return content
         }
 
-        throw ProviderApiException("${providerLabel(provider)}: Parserfehler - Antwortformat unerwartet.")
+        // Format C: text at top level
+        root.get("text")?.asString?.takeIf { it.isNotBlank() }?.let { return it }
+
+        // Format D: output array at top level
+        val output = root.getAsJsonArray("output")
+        if (output != null) {
+            val nested = extractFromNestedOutput(output)
+            if (!nested.isNullOrBlank()) return nested
+        }
+
+        // Generic fallbacks: content/response/message at top level
+        root.get("content")?.asString?.takeIf { it.isNotBlank() }?.let { return it }
+        root.get("response")?.asString?.takeIf { it.isNotBlank() }?.let { return it }
+        root.get("result")?.asString?.takeIf { it.isNotBlank() }?.let { return it }
+
+        // Unknown format: include sanitized response schema without secrets
+        val snippet = sanitizedText(gson.toJson(root).take(300), provider)
+        throw ProviderApiException(
+            "${providerLabel(provider)}: Antwortformat unerwartet. HTTP war erfolgreich, Parser konnte keinen Text finden. Schema: $snippet"
+        )
     }
 
     private fun parseJsonObject(raw: String, provider: Provider): JsonObject {
         return try {
             JsonParser.parseString(raw).asJsonObject
         } catch (_: Exception) {
-            throw ProviderApiException("${providerLabel(provider)}: Parserfehler - Antwortformat unerwartet.")
+            // Fallback: try to extract any text from non-JSON responses
+            tryExtractTextFromRaw(raw)?.let { text ->
+                return JsonObject().apply { addProperty("content", sanitizedText(text, provider)) }
+            }
+            val snippet = sanitizedText(raw.take(200), provider)
+            throw ProviderApiException(
+                "${providerLabel(provider)}: Parserfehler - Antwort war kein gültiges JSON. Raw: $snippet"
+            )
         }
+    }
+
+    private fun tryExtractTextFromRaw(raw: String): String? {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return null
+
+        // Try to find a reasonable text block using simple string extraction
+        val patterns = listOf(
+            "\"content\"" to "content",
+            "\"text\"" to "text",
+            "\"message\"" to "message",
+            "\"response\"" to "response"
+        )
+        for ((keyPattern, _) in patterns) {
+            val escapedPattern = Regex(
+                keyPattern + "\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"",
+                setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)
+            )
+            val match = escapedPattern.find(trimmed)
+            if (match != null) {
+                val text = match.groupValues[1]
+                    .replace("\\\"", "\"")
+                    .replace("\\n", "\n")
+                    .replace("\\t", "\t")
+                if (text.isNotBlank() && text.length > 1) return text.take(2000)
+            }
+        }
+
+        // Last resort: if the raw text is plain text (not surrounded by JSON braces)
+        if (!trimmed.startsWith("{") && !trimmed.startsWith("[") && trimmed.length > 1 && trimmed.length < 3000) {
+            return trimmed
+        }
+
+        return null
     }
 
     suspend fun testProvider(provider: Provider): ProviderConnectionResult {
@@ -273,12 +364,16 @@ object ApiClient {
                         )
                     }
                     val content = extractCompletionContent(parseJsonObject(bodyString, provider), provider)
+                    val trimmed = content.trim()
+                    val okTest = trimmed.lowercase().let { t ->
+                        t == "ok" || t == "ok." || t == "okay" || t.contains("ok")
+                    }
                     ProviderConnectionResult(
                         success = true,
                         providerName = provider.displayName,
                         modelName = provider.modelName,
                         httpCode = response.code,
-                        answer = content.trim().take(80)
+                        answer = if (okTest && trimmed.length <= 10) "OK" else trimmed.take(80)
                     )
                 }
             } catch (throwable: Throwable) {
@@ -449,8 +544,11 @@ object ApiClient {
                     }
 
                     if (fullContent.isEmpty()) {
+                        val snippet = sanitizedText(rawJsonBuffer.toString().take(300), provider)
                         return@withContext Result.failure(
-                            ProviderApiException("${providerLabel(provider)}: Parserfehler - Antwortformat unerwartet.")
+                            ProviderApiException(
+                                "${providerLabel(provider)}: Streaming lieferte keinen Inhalt. Raw: $snippet"
+                            )
                         )
                     }
 
@@ -468,8 +566,13 @@ object ApiClient {
             val message = error.get("message")?.asString ?: "Provider meldet einen Fehler."
             throw ProviderApiException("${providerLabel(provider)}: ${sanitizedText(message, provider)}")
         }
-        val choices = root.getAsJsonArray("choices") ?: return ""
-        if (choices.size() == 0) return ""
-        return extractContentFromChoice(choices[0].asJsonObject).orEmpty()
+        val choices = root.getAsJsonArray("choices")
+        if (choices != null && choices.size() > 0) {
+            return extractContentFromChoice(choices[0].asJsonObject).orEmpty()
+        }
+        // Non-standard streaming: try top-level text
+        root.get("text")?.asString?.takeIf { it.isNotBlank() }?.let { return it }
+        root.get("content")?.asString?.takeIf { it.isNotBlank() }?.let { return it }
+        return ""
     }
 }

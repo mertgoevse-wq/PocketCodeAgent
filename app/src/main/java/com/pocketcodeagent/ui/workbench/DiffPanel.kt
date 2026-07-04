@@ -1,5 +1,9 @@
 package com.pocketcodeagent.ui.workbench
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -19,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import com.pocketcodeagent.data.model.FilePatch
 import com.pocketcodeagent.data.model.FilePatchAction
 import com.pocketcodeagent.data.model.FilePatchStatus
+import com.pocketcodeagent.domain.export.PatchMarkdownExporter
 import com.pocketcodeagent.ui.theme.*
 import com.pocketcodeagent.ui.viewmodel.WorkspaceViewModel
 
@@ -39,12 +45,14 @@ fun DiffPanel(
     onConfirmDelete: (FilePatch) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    var showExportDone by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFF0E0E10))
     ) {
-        // Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -61,6 +69,27 @@ fun DiffPanel(
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(Modifier.weight(1f))
+
+            // Export Markdown button
+            if (patches.isNotEmpty()) {
+                OutlinedButton(
+                    onClick = {
+                        val md = PatchMarkdownExporter.exportToMarkdown(patches)
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Patches", md))
+                        Toast.makeText(context, "Patches als Markdown kopiert", Toast.LENGTH_SHORT).show()
+                    },
+                    enabled = !viewModel.isApplyingPatch,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = SlateBlue),
+                    contentPadding = PaddingValues(horizontal = 9.dp, vertical = 4.dp)
+                ) {
+                    Icon(Icons.Default.Description, null, modifier = Modifier.size(13.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Export MD", fontSize = 11.sp)
+                }
+                Spacer(Modifier.width(6.dp))
+            }
+
             if (viewModel.isApplyingPatch) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(14.dp),
@@ -147,7 +176,6 @@ private fun DiffCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // File path
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Description, null, tint = TextSecondary, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
@@ -191,7 +219,6 @@ private fun DiffCard(
 
             Spacer(Modifier.height(10.dp))
 
-            // Inline diff lines
             val oldLines = patch.oldText.linesOrEmpty()
             val newLines = if (patch.action == FilePatchAction.DELETE) emptyList() else patch.newText.linesOrEmpty()
             val lineLimit = if (showFull) Int.MAX_VALUE else 20
@@ -204,7 +231,7 @@ private fun DiffCard(
                             .background(RemovedBg)
                             .padding(horizontal = 8.dp, vertical = 2.dp)
                     ) {
-                        Text("−", color = RemovedText, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                        Text("\u2212", color = RemovedText, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                         Spacer(Modifier.width(6.dp))
                         Text(line, color = RemovedText, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                     }

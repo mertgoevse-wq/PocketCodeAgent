@@ -7,6 +7,7 @@ import com.pocketcodeagent.data.model.FilePatchAction
 import com.pocketcodeagent.data.model.AgentCommand
 import com.pocketcodeagent.data.model.AgentResponse
 import com.pocketcodeagent.data.model.Provider
+import com.pocketcodeagent.data.model.ProviderTestStatus
 import com.pocketcodeagent.data.model.WorkspaceFile
 import com.pocketcodeagent.data.network.ApiClient
 import com.google.gson.Gson
@@ -18,6 +19,10 @@ import com.pocketcodeagent.domain.agent.CommandRiskLevel
 import com.pocketcodeagent.domain.agent.registry.AgentRegistry
 import com.pocketcodeagent.domain.agent.registry.AgentRolePromptBuilder
 import com.pocketcodeagent.domain.agent.registry.RichAgentRole
+import com.pocketcodeagent.domain.context.WorkspaceContext
+import com.pocketcodeagent.domain.context.WorkspaceContextBuilder
+import com.pocketcodeagent.domain.preview.PreviewTarget
+import com.pocketcodeagent.domain.terminal.TerminalCommand
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
@@ -27,14 +32,35 @@ class AgentRepository(
     private val providerRepository: ProviderRepository,
     private val workspaceRepository: WorkspaceRepository
 ) {
+    private val contextBuilder = WorkspaceContextBuilder(workspaceRepository)
 
-    private fun getSystemPrompt(role: RichAgentRole, workspaceContext: String, agentMode: AgentMode): String {
-        return AgentRolePromptBuilder.build(role, agentMode, workspaceContext)
+    suspend fun buildWorkspaceContext(
+        userTask: String,
+        selectedRoleId: String,
+        selectedSkillId: String?,
+        activeFilePath: String?,
+        pendingChanges: List<FilePatch>,
+        terminalCommands: List<TerminalCommand>,
+        previewTarget: PreviewTarget?
+    ): WorkspaceContext {
+        return contextBuilder.buildContext(
+            userTask = userTask,
+            selectedRoleId = selectedRoleId,
+            selectedSkillId = selectedSkillId,
+            activeFilePath = activeFilePath,
+            pendingChanges = pendingChanges,
+            terminalCommands = terminalCommands,
+            previewTarget = previewTarget
+        )
+    }
+
+    private fun getSystemPrompt(role: RichAgentRole, context: WorkspaceContext, agentMode: AgentMode): String {
+        return AgentRolePromptBuilder.build(role, agentMode, context)
     }
 
     /** Legacy support: maps old AgentRole enum to RichAgentRole via AgentRegistry. */
-    private fun getSystemPrompt(role: AgentRole, workspaceContext: String, agentMode: AgentMode): String {
-        return getSystemPrompt(AgentRegistry.fromLegacy(role), workspaceContext, agentMode)
+    private fun getSystemPrompt(role: AgentRole, context: WorkspaceContext, agentMode: AgentMode): String {
+        return getSystemPrompt(AgentRegistry.fromLegacy(role), context, agentMode)
     }
 
     fun runAgent(
@@ -43,6 +69,7 @@ class AgentRepository(
         agentMode: AgentMode,
         history: List<ChatMessage>,
         rootUriString: String?,
+        workspaceContext: WorkspaceContext? = null,
         onChunk: (String) -> Unit
     ) = flow {
         if (provider.id == 999) {
@@ -92,8 +119,8 @@ class AgentRepository(
 
             emit(
                 ChatMessage(
-                    sender = role.displayName,
-                    message = displayedMessage,
+                    sender = "${role.displayName} (Demo)",
+                    message = "[Demo-Agent: Diese Antwort nutzt keine echte API.]\n\n$displayedMessage",
                     isAgent = true,
                     agentRole = role,
                     proposedPatches = proposedPatches,
@@ -116,23 +143,12 @@ class AgentRepository(
             return@flow
         }
 
-        // 1. Gather workspace file list for context
-        val workspaceContext = if (rootUriString != null) {
-            try {
-                val files = withContext(Dispatchers.IO) {
-                    workspaceRepository.loadWorkspaceFiles(android.net.Uri.parse(rootUriString))
-                }
-                formatFilesContext(files)
-            } catch (e: Exception) {
-                "No workspace selected or read permission missing."
-            }
-        } else {
-            "No workspace selected."
-        }
+        // 1. Build or use provided workspace context
+        val context = workspaceContext ?: buildFallbackContext(rootUriString)
 
         // 2. Prepare chat messages history
         val apiMessages = mutableListOf<Map<String, String>>()
-        apiMessages.add(mapOf("role" to "system", "content" to getSystemPrompt(role, workspaceContext, agentMode)))
+        apiMessages.add(mapOf("role" to "system", "content" to getSystemPrompt(role, context, agentMode)))
         
         for (msg in history) {
             val roleName = if (msg.isAgent) "assistant" else "user"
@@ -171,6 +187,7 @@ class AgentRepository(
             val safeMessage = exception?.message?.takeIf { it.isNotBlank() }
                 ?: "${provider.displayName}: Anfrage fehlgeschlagen."
             providerRepository.log(role.displayName, "Agent request failed: $safeMessage", "ERROR")
+            updateProviderStatusOnError(provider, safeMessage)
             emit(
                 ChatMessage(
                     sender = role.displayName,
@@ -178,6 +195,51 @@ class AgentRepository(
                     isAgent = true,
                     agentRole = role
                 )
+            )
+        }
+    }
+
+    private suspend fun updateProviderStatusOnError(provider: Provider, safeMessage: String) {
+        if (provider.id > 0) {
+            val updated = provider.copy(
+                lastTestStatus = ProviderTestStatus.ERROR,
+                lastErrorSanitized = safeMessage.take(200)
+            )
+            providerRepository.saveProvider(updated)
+        }
+    }
+
+    private fun buildFallbackContext(rootUriString: String?): WorkspaceContext {
+        if (rootUriString == null) return WorkspaceContext.empty()
+        return try {
+            val files = workspaceRepository.loadWorkspaceFiles(android.net.Uri.parse(rootUriString))
+            val treeSummary = AgentRolePromptBuilder.formatFilesContext(files)
+            WorkspaceContext(
+                workspaceName = rootUriString.substringAfterLast("/"),
+                fileTreeSummary = treeSummary,
+                activeFilePath = null,
+                activeFileContent = null,
+                relevantFiles = emptyList(),
+                buildFiles = emptyList(),
+                pendingChangesSummary = "",
+                terminalQueueSummary = "",
+                previewSummary = "",
+                warnings = emptyList(),
+                estimatedChars = treeSummary.length
+            )
+        } catch (e: Exception) {
+            WorkspaceContext(
+                workspaceName = null,
+                fileTreeSummary = "No workspace selected or read permission missing.",
+                activeFilePath = null,
+                activeFileContent = null,
+                relevantFiles = emptyList(),
+                buildFiles = emptyList(),
+                pendingChangesSummary = "",
+                terminalQueueSummary = "",
+                previewSummary = "",
+                warnings = listOf("Failed to load workspace: ${e.message}"),
+                estimatedChars = 0
             )
         }
     }

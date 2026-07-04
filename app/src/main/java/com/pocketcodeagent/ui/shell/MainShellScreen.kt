@@ -1,6 +1,11 @@
 package com.pocketcodeagent.ui.shell
 
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -21,8 +26,12 @@ import com.pocketcodeagent.data.model.ProviderPresets
 import com.pocketcodeagent.data.model.ProviderTestStatus
 import com.pocketcodeagent.domain.agent.AgentRunState
 import com.pocketcodeagent.domain.agent.CommandRiskLevel
+import com.pocketcodeagent.domain.security.EmergencyStopState
+import com.pocketcodeagent.domain.terminal.CommandStatus
+import com.pocketcodeagent.domain.workspace.WorkspacePathHelper
 import com.pocketcodeagent.ui.chat.ChatPanel
 import com.pocketcodeagent.ui.screen.ProviderSetupScreen
+import com.pocketcodeagent.ui.screen.SettingsScreen
 import com.pocketcodeagent.ui.theme.*
 import com.pocketcodeagent.ui.viewmodel.AgentStatus
 import com.pocketcodeagent.ui.viewmodel.AgentViewModel
@@ -31,7 +40,6 @@ import com.pocketcodeagent.ui.viewmodel.ProviderViewModel
 import com.pocketcodeagent.ui.viewmodel.WorkspaceViewModel
 import com.pocketcodeagent.ui.workbench.*
 
-// ─── Status badge colors ─────────────────────────────────────────────────────
 private val StatusColors = mapOf(
     AgentStatus.IDLE             to Color(0xFF3A3A44),
     AgentStatus.PLANNING         to Color(0xFF5E72E4),
@@ -59,17 +67,75 @@ fun MainShellScreen(
     LaunchedEffect(providers) {
         val selected = mainViewModel.selectedProvider
         if (selected != null) {
-            providers.firstOrNull { it.id == selected.id }?.let { latest ->
+            val latest = providers.firstOrNull { it.id == selected.id }
+            if (latest != null) {
                 mainViewModel.selectedProvider = latest
+            } else if (selected.id == 999) {
+                mainViewModel.selectedProvider = selected
+            } else {
+                mainViewModel.selectedProvider = null
+                if (providers.isEmpty()) {
+                    val demoProvider = Provider(
+                        id = 999,
+                        name = "Demo Mode",
+                        baseUrl = "",
+                        apiKey = "",
+                        modelName = "demo-model"
+                    )
+                    mainViewModel.selectedProvider = demoProvider
+                }
             }
-        } else if (providers.size == 1) {
-            mainViewModel.selectedProvider = providers.first()
         }
     }
 
     // Keep agent status in sync with agentViewModel
     val openPatchCount = mainViewModel.pendingFileChanges.count {
         it.status == FilePatchStatus.PENDING || it.status == FilePatchStatus.CONFLICT || it.status == FilePatchStatus.FAILED
+    }
+    val terminalQueueCount = agentViewModel.terminalCommands.count { it.status == CommandStatus.QUEUED }
+    val previewReady = mainViewModel.workspacePreviewReady
+    val shareContext = LocalContext.current
+    val exportZipLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri: Uri? ->
+        val root = mainViewModel.selectedWorkspaceUri
+        if (uri != null && root != null) {
+            workspaceViewModel.exportWorkspaceZip(
+                context = shareContext.applicationContext,
+                rootUriString = root,
+                outputUriString = uri.toString()
+            )
+        }
+    }
+
+    LaunchedEffect(agentViewModel.sessionId) {
+        mainViewModel.restoreSessionState(agentViewModel.sessionId)
+    }
+
+    LaunchedEffect(mainViewModel.selectedWorkspaceUri) {
+        mainViewModel.selectedWorkspaceUri?.let { workspaceViewModel.loadWorkspace(it) }
+    }
+
+    LaunchedEffect(mainViewModel.selectedFileUri, mainViewModel.selectedFileName, workspaceViewModel.files) {
+        val fileUri = mainViewModel.selectedFileUri
+        val fileName = mainViewModel.selectedFileName
+        if (fileUri != null && fileName != null && workspaceViewModel.openFileUri != fileUri) {
+            val path = WorkspacePathHelper.safeRelativePath(
+                files = workspaceViewModel.files,
+                fileUri = fileUri,
+                openFileRelativePath = mainViewModel.selectedFileRelativePath,
+                fallbackFileName = fileName
+            )
+            workspaceViewModel.loadFileContent(fileUri, path, fileName)
+        }
+    }
+
+    // Handle share intent from CodeEditor
+    LaunchedEffect(mainViewModel.shareIntent) {
+        mainViewModel.shareIntent?.let { intent ->
+            shareContext.startActivity(intent)
+            mainViewModel.shareIntent = null
+        }
     }
 
     LaunchedEffect(agentViewModel.runState, agentViewModel.isExecuting, workspaceViewModel.isApplyingPatch, openPatchCount) {
@@ -88,10 +154,15 @@ fun MainShellScreen(
         }
     }
 
+    val emergencyStop by mainViewModel.ownerSecurityManager.emergencyStop.collectAsState()
+
     Scaffold(
         containerColor = Color(0xFF0E0E10),
         topBar = {
             Column {
+                if (emergencyStop != EmergencyStopState.NORMAL) {
+                    EmergencyStopBanner(emergencyStop)
+                }
                 ShellTopBar(
                     workspaceName = mainViewModel.selectedWorkspaceName,
                     agentStatus = mainViewModel.agentStatus,
@@ -103,7 +174,10 @@ fun MainShellScreen(
                     isExecuting = agentViewModel.isExecuting,
                     isTesting = providerViewModel.isTesting &&
                         providerViewModel.testingProviderId == mainViewModel.selectedProvider?.id,
-                    onProviderSelected = { mainViewModel.selectedProvider = it },
+                    onProviderSelected = { 
+                        mainViewModel.selectedProvider = it
+                        mainViewModel.persistSelectedProvider(it)
+                    },
                     onModelSelected = { provider, model ->
                         providerViewModel.updateProviderModel(provider, model) { updated ->
                             mainViewModel.selectedProvider = updated
@@ -122,10 +196,12 @@ fun MainShellScreen(
                     workspaceName = mainViewModel.selectedWorkspaceName,
                     fileCount = workspaceViewModel.files.size,
                     isLoading = workspaceViewModel.isLoadingFiles,
+                    sessionNotice = mainViewModel.sessionRestoreNotice,
                     onPickWorkspace = onPickWorkspace,
                     onReload = {
                         mainViewModel.selectedWorkspaceUri?.let { workspaceViewModel.loadWorkspace(it) }
-                    }
+                    },
+                    onDismissNotice = { mainViewModel.clearSessionRestoreNotice() }
                 )
                 HorizontalDivider(color = BorderGrey, thickness = 0.5.dp)
             }
@@ -134,7 +210,9 @@ fun MainShellScreen(
             ShellBottomNav(
                 activeTab = mainViewModel.activeTab,
                 onTabSelected = { mainViewModel.activeTab = it },
-                diffBadge = openPatchCount
+                diffBadge = openPatchCount,
+                terminalBadge = terminalQueueCount,
+                previewReady = previewReady
             )
         }
     ) { padding ->
@@ -148,6 +226,9 @@ fun MainShellScreen(
                     viewModel = agentViewModel,
                     provider = mainViewModel.selectedProvider,
                     workspaceUriString = mainViewModel.selectedWorkspaceUri,
+                    pendingChanges = mainViewModel.pendingFileChanges,
+                    activeFileName = mainViewModel.selectedFileName,
+                    previewTarget = mainViewModel.activePreviewTarget,
                     onReviewDiff = { patches ->
                         mainViewModel.openDiff(patches)
                     },
@@ -171,8 +252,15 @@ fun MainShellScreen(
                 AppTab.FILES -> FileTreePanel(
                     viewModel = workspaceViewModel,
                     workspaceUriString = mainViewModel.selectedWorkspaceUri,
-                    onFileClick = { uri, name ->
-                        mainViewModel.openFileInEditor(uri, name)
+                    onFileClick = { uri, name, path ->
+                        mainViewModel.openFileInEditor(uri, name, path)
+                    },
+                    onExportZip = {
+                        val baseName = mainViewModel.selectedWorkspaceName
+                            ?.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                            ?.ifBlank { "workspace" }
+                            ?: "workspace"
+                        exportZipLauncher.launch("$baseName.zip")
                     },
                     modifier = Modifier.fillMaxSize()
                 )
@@ -181,7 +269,30 @@ fun MainShellScreen(
                     viewModel = workspaceViewModel,
                     fileUri = mainViewModel.selectedFileUri,
                     fileName = mainViewModel.selectedFileName,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    filePath = WorkspacePathHelper.safeRelativePath(
+                        files = workspaceViewModel.files,
+                        fileUri = mainViewModel.selectedFileUri,
+                        openFileRelativePath = workspaceViewModel.openFileRelativePath
+                            ?: mainViewModel.selectedFileRelativePath,
+                        fallbackFileName = mainViewModel.selectedFileName
+                    ),
+                    onOpenFiles = { mainViewModel.activeTab = AppTab.FILES },
+                    onPreviewFile = { path, name ->
+                        mainViewModel.loadPreviewFile(path, name)
+                    },
+                    onCreateDiffPatch = { patch ->
+                        mainViewModel.addPendingPatch(patch)
+                        mainViewModel.openDiff()
+                    },
+                    onShareFile = { fileName, content ->
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, content)
+                            putExtra(Intent.EXTRA_SUBJECT, fileName)
+                        }
+                        mainViewModel.shareIntent = Intent.createChooser(intent, "Datei teilen: $fileName")
+                    }
                 )
 
                 AppTab.DIFF -> DiffPanel(
@@ -265,7 +376,7 @@ fun MainShellScreen(
         }
     }
 
-    // Settings bottom sheet
+    // Provider settings bottom sheet
     if (mainViewModel.showSettingsSheet) {
         ModalBottomSheet(
             onDismissRequest = { mainViewModel.showSettingsSheet = false },
@@ -277,7 +388,29 @@ fun MainShellScreen(
                 activeProvider = mainViewModel.selectedProvider,
                 onSelectProvider = { mainViewModel.selectedProvider = it },
                 onBackClick = { mainViewModel.showSettingsSheet = false },
-                onNextClick = { mainViewModel.showSettingsSheet = false }
+                onNextClick = { mainViewModel.showSettingsSheet = false },
+                onOpenSecuritySettings = { mainViewModel.showOwnerSettings = true }
+            )
+        }
+    }
+
+    // Owner Security settings sheet
+    if (mainViewModel.showOwnerSettings) {
+        ModalBottomSheet(
+            onDismissRequest = { mainViewModel.showOwnerSettings = false },
+            containerColor = Color(0xFF13131A),
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            SettingsScreen(
+                ownerSecurity = mainViewModel.ownerSecurityManager,
+                onResetWorkspace = { mainViewModel.showOwnerSettings = false },
+                onClearLogs = { agentViewModel.clearLogs(); mainViewModel.showOwnerSettings = false },
+                onBackClick = { mainViewModel.showOwnerSettings = false },
+                onOpenChat = { mainViewModel.showOwnerSettings = false; mainViewModel.activeTab = AppTab.CHAT },
+                onOpenFiles = { mainViewModel.showOwnerSettings = false; mainViewModel.activeTab = AppTab.FILES },
+                onOpenDiff = { mainViewModel.showOwnerSettings = false; mainViewModel.openDiff() },
+                onOpenPreview = { mainViewModel.showOwnerSettings = false; mainViewModel.openPreview() },
+                onOpenTerminal = { mainViewModel.showOwnerSettings = false; mainViewModel.openTerminal() }
             )
         }
     }
@@ -352,12 +485,14 @@ private fun ProviderModelBar(
         ProviderPresets.modelOptionsFor(it.providerType, it.modelName)
     }.orEmpty()
     val status = when {
+        provider?.id == 999 -> ProviderTestStatus.NOT_CONFIGURED
         isTesting -> ProviderTestStatus.TESTING
         provider == null || !provider.hasRequiredConfiguration() -> ProviderTestStatus.NOT_CONFIGURED
         provider.lastTestStatus == ProviderTestStatus.READY -> ProviderTestStatus.READY
         provider.lastTestStatus == ProviderTestStatus.ERROR -> ProviderTestStatus.ERROR
         else -> ProviderTestStatus.NOT_CONFIGURED
     }
+    val isDemo = provider?.id == 999
 
     Row(
         modifier = Modifier
@@ -467,17 +602,19 @@ private fun ProviderModelBar(
             }
         }
 
-        ProviderStatusPill(status)
+        ProviderStatusPill(status, isDemo = isDemo)
 
-        IconButton(
-            onClick = onTestClick,
-            enabled = !isExecuting && !isTesting && provider?.hasRequiredConfiguration() == true,
-            modifier = Modifier.size(30.dp)
-        ) {
-            if (isTesting) {
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = SlateBlue, strokeWidth = 2.dp)
-            } else {
-                Icon(Icons.Default.PlayArrow, contentDescription = "Test provider", tint = TextSecondary, modifier = Modifier.size(16.dp))
+        if (!isDemo) {
+            IconButton(
+                onClick = onTestClick,
+                enabled = !isExecuting && !isTesting && provider?.hasRequiredConfiguration() == true,
+                modifier = Modifier.size(30.dp)
+            ) {
+                if (isTesting) {
+                    CircularProgressIndicator(modifier = Modifier.size(14.dp), color = SlateBlue, strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Default.PlayArrow, contentDescription = "Test provider", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                }
             }
         }
 
@@ -488,13 +625,15 @@ private fun ProviderModelBar(
 }
 
 @Composable
-private fun ProviderStatusPill(status: ProviderTestStatus) {
-    val color = when (status) {
-        ProviderTestStatus.READY -> CalmSage
-        ProviderTestStatus.TESTING -> SlateBlue
-        ProviderTestStatus.ERROR -> WarmCopper
-        ProviderTestStatus.NOT_CONFIGURED -> Color(0xFF777783)
+private fun ProviderStatusPill(status: ProviderTestStatus, isDemo: Boolean = false) {
+    val color = when {
+        isDemo -> SlateBlue
+        status == ProviderTestStatus.READY -> CalmSage
+        status == ProviderTestStatus.TESTING -> SlateBlue
+        status == ProviderTestStatus.ERROR -> WarmCopper
+        else -> Color(0xFF777783)
     }
+    val label = if (isDemo) "Offline demo" else status.label
     Surface(
         color = color.copy(alpha = 0.13f),
         shape = RoundedCornerShape(6.dp)
@@ -510,7 +649,7 @@ private fun ProviderStatusPill(status: ProviderTestStatus) {
             )
             Spacer(Modifier.width(4.dp))
             Text(
-                status.label,
+                label,
                 color = color,
                 fontSize = 10.sp,
                 maxLines = 1
@@ -525,39 +664,87 @@ private fun WorkspaceStatusBar(
     workspaceName: String?,
     fileCount: Int,
     isLoading: Boolean,
+    sessionNotice: String?,
     onPickWorkspace: () -> Unit,
-    onReload: () -> Unit
+    onReload: () -> Unit,
+    onDismissNotice: () -> Unit
 ) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF111116))
+                .padding(horizontal = 12.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            IconButton(onClick = onPickWorkspace, modifier = Modifier.size(28.dp)) {
+                Icon(Icons.Default.FolderOpen, null, tint = TextSecondary, modifier = Modifier.size(14.dp))
+            }
+            Text(
+                text = workspaceName ?: "Workspace öffnen …",
+                color = if (workspaceName != null) TextSecondary else Color(0xFF444450),
+                fontSize = 11.sp,
+                modifier = Modifier.weight(1f),
+                maxLines = 1
+            )
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(12.dp),
+                    color = CalmSage,
+                    strokeWidth = 1.5.dp
+                )
+            } else if (fileCount > 0) {
+                Text("$fileCount", color = Color(0xFF444450), fontSize = 10.sp)
+            }
+            IconButton(onClick = onReload, modifier = Modifier.size(28.dp)) {
+                Icon(Icons.Default.Refresh, null, tint = Color(0xFF444450), modifier = Modifier.size(14.dp))
+            }
+        }
+        sessionNotice?.let { notice ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(SlateBlue.copy(alpha = 0.12f))
+                    .padding(horizontal = 12.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Info, null, tint = SlateBlue, modifier = Modifier.size(13.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    notice,
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 2
+                )
+                IconButton(onClick = onDismissNotice, modifier = Modifier.size(24.dp)) {
+                    Icon(Icons.Default.Close, null, tint = TextSecondary, modifier = Modifier.size(13.dp))
+                }
+            }
+        }
+    }
+}
+
+// ─── Emergency Stop Banner ────────────────────────────────────────────────────
+@Composable
+private fun EmergencyStopBanner(state: EmergencyStopState) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF111116))
+            .background(Color(0xFFF5365C))
             .padding(horizontal = 12.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onPickWorkspace, modifier = Modifier.size(28.dp)) {
-            Icon(Icons.Default.FolderOpen, null, tint = TextSecondary, modifier = Modifier.size(14.dp))
-        }
+        Icon(Icons.Default.Warning, null, tint = Color.White, modifier = Modifier.size(15.dp))
+        Spacer(Modifier.width(8.dp))
         Text(
-            text = workspaceName ?: "Workspace öffnen …",
-            color = if (workspaceName != null) TextSecondary else Color(0xFF444450),
+            "EMERGENCY: ${state.label}",
+            color = Color.White,
             fontSize = 11.sp,
-            modifier = Modifier.weight(1f),
-            maxLines = 1
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.weight(1f)
         )
-        if (isLoading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(12.dp),
-                color = CalmSage,
-                strokeWidth = 1.5.dp
-            )
-        } else if (fileCount > 0) {
-            Text("$fileCount", color = Color(0xFF444450), fontSize = 10.sp)
-        }
-        IconButton(onClick = onReload, modifier = Modifier.size(28.dp)) {
-            Icon(Icons.Default.Refresh, null, tint = Color(0xFF444450), modifier = Modifier.size(14.dp))
-        }
     }
 }
 
@@ -566,7 +753,9 @@ private fun WorkspaceStatusBar(
 private fun ShellBottomNav(
     activeTab: AppTab,
     onTabSelected: (AppTab) -> Unit,
-    diffBadge: Int
+    diffBadge: Int,
+    terminalBadge: Int = 0,
+    previewReady: Boolean = false
 ) {
     NavigationBar(
         containerColor = Color(0xFF0E0E10),
@@ -574,16 +763,25 @@ private fun ShellBottomNav(
         tonalElevation = 0.dp
     ) {
         AppTab.entries.forEach { tab ->
+            val badge: (@Composable BoxScope.() -> Unit)? = when {
+                tab == AppTab.DIFF && diffBadge > 0 -> {
+                    { Badge(containerColor = WarmCopper) { Text("$diffBadge", fontSize = 9.sp, color = Color.White) } }
+                }
+                tab == AppTab.TERMINAL && terminalBadge > 0 -> {
+                    { Badge(containerColor = CalmSage) { Text("$terminalBadge", fontSize = 9.sp, color = Color(0xFF0E0E10)) } }
+                }
+                tab == AppTab.PREVIEW && previewReady -> {
+                    { Badge(containerColor = SlateBlue) { Text("!", fontSize = 9.sp, color = Color.White) } }
+                }
+                else -> null
+            }
+
             NavigationBarItem(
                 selected = activeTab == tab,
                 onClick = { onTabSelected(tab) },
                 icon = {
-                    if (tab == AppTab.DIFF && diffBadge > 0) {
-                        BadgedBox(badge = {
-                            Badge(containerColor = WarmCopper) {
-                                Text("$diffBadge", fontSize = 9.sp, color = Color.White)
-                            }
-                        }) {
+                    if (badge != null) {
+                        BadgedBox(badge = badge) {
                             Icon(tab.icon, contentDescription = tab.label)
                         }
                     } else {

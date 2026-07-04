@@ -46,6 +46,7 @@ fun TerminalPanel(
     val commands = viewModel.terminalCommands
     var showCautionDialog by remember { mutableStateOf<TerminalCommand?>(null) }
     var showTermuxSetup by remember { mutableStateOf(false) }
+    var showGitWorkflow by remember { mutableStateOf(false) }
     val termuxInstalled = isTermuxInstalled(context)
 
     Column(
@@ -179,6 +180,44 @@ fun TerminalPanel(
         // Termux setup card
         AnimatedVisibility(visible = showTermuxSetup, enter = expandVertically(), exit = shrinkVertically()) {
             TermuxSetupCard(context, onSetPreviewUrl)
+        }
+
+        // Git workflow toggle button
+        Surface(
+            onClick = { showGitWorkflow = !showGitWorkflow },
+            color = Color(0xFF0D1117),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Code,
+                    null,
+                    tint = SlateBlue,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Push via Termux (Git Workflow)",
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    if (showGitWorkflow) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    null,
+                    tint = TextSecondary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+        HorizontalDivider(color = Color(0xFF1C1C1C), thickness = 0.5.dp)
+
+        // Git workflow card
+        AnimatedVisibility(visible = showGitWorkflow, enter = expandVertically(), exit = shrinkVertically()) {
+            GitWorkflowCard(context)
         }
 
         // Command queue
@@ -455,6 +494,60 @@ private fun TermuxSetupCard(context: Context, onSetPreviewUrl: (String) -> Unit)
                 ) {
                     Text("Set Preview URL", color = SlateBlue, fontSize = 10.sp)
                 }
+            }
+        }
+    }
+}
+
+// ─── Git Workflow Card ────────────────────────────────────────────────────
+
+@Composable
+private fun GitWorkflowCard(context: Context) {
+    Surface(color = Color(0xFF0D1117), modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Git Workflow (Push via Termux)", color = SlateBlue, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+
+            Text(
+                "PocketCodeAgent fuehrt nichts automatisch aus. Pruefe Dateien und Secrets vor git push. Kopiere die Commands und fuehre sie in Termux aus.",
+                color = WarmCopper,
+                fontSize = 10.sp,
+                lineHeight = 14.sp
+            )
+
+            val gitCommands = listOf(
+                "git status" to "Geaenderte Dateien anzeigen",
+                "git add ." to "Alle Aenderungen stagen",
+                "git commit -m \"Update PocketCodeAgent project\"" to "Commit erstellen",
+                "git remote -v" to "Remote-URL pruefen",
+                "git push" to "Push ausfuehren"
+            )
+
+            gitCommands.forEach { (cmd, desc) ->
+                Surface(
+                    color = Color(0xFF13131A),
+                    shape = RoundedCornerShape(6.dp),
+                    onClick = { copyText(context, cmd) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(cmd, color = Color(0xFFCCCCCC), fontFamily = FontFamily.Monospace, fontSize = 10.sp,
+                            modifier = Modifier.weight(1f))
+                        Spacer(Modifier.width(8.dp))
+                        Text(desc, color = Color(0xFF444450), fontSize = 9.sp)
+                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Default.ContentCopy, null, tint = Color(0xFF444450), modifier = Modifier.size(10.dp))
+                    }
+                }
+            }
+
+            TextButton(
+                onClick = { copyText(context, gitCommands.joinToString(" && ") { it.first }) },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Text("Alle Git-Commands kopieren", color = CalmSage, fontSize = 10.sp)
             }
         }
     }

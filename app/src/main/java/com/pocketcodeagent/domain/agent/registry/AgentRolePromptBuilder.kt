@@ -2,6 +2,7 @@ package com.pocketcodeagent.domain.agent.registry
 
 import com.pocketcodeagent.data.model.WorkspaceFile
 import com.pocketcodeagent.domain.agent.AgentMode
+import com.pocketcodeagent.domain.context.WorkspaceContext
 
 object AgentRolePromptBuilder {
 
@@ -22,12 +23,13 @@ Core Rules (from AGENTS.md):
     fun build(
         role: RichAgentRole,
         agentMode: AgentMode,
-        workspaceContext: String
+        context: WorkspaceContext
     ): String {
         val modeInstructions = when (agentMode) {
             AgentMode.DISCUSS -> buildDiscussModeInstructions()
             AgentMode.BUILD -> buildBuildModeInstructions()
         }
+        val contextString = context.toPromptString()
         return buildString {
             appendLine(baseRules)
             appendLine()
@@ -35,8 +37,8 @@ Core Rules (from AGENTS.md):
             appendLine()
             appendLine(modeInstructions)
             appendLine()
-            appendLine("Workspace context:")
-            appendLine(workspaceContext)
+            appendLine("Workspace context (${context.estimatedChars} chars):")
+            appendLine(contextString)
         }
     }
 

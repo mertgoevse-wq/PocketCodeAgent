@@ -1,6 +1,8 @@
 package com.pocketcodeagent.ui.workbench
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -11,6 +13,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pocketcodeagent.ui.theme.SlateBlue
 import com.pocketcodeagent.ui.theme.TextSecondary
 
 /**
@@ -21,7 +24,9 @@ fun PanelPlaceholder(
     icon: ImageVector,
     title: String,
     subtitle: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null
 ) {
     Column(
         modifier = modifier
@@ -49,5 +54,14 @@ fun PanelPlaceholder(
             color = Color(0xFF333338),
             fontSize = 12.sp
         )
+        if (actionLabel != null && onAction != null) {
+            Spacer(Modifier.height(16.dp))
+            Button(
+                onClick = onAction,
+                colors = ButtonDefaults.buttonColors(containerColor = SlateBlue)
+            ) {
+                Text(actionLabel, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
 }

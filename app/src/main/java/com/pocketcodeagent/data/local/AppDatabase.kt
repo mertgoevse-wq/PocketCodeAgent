@@ -6,15 +6,42 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.pocketcodeagent.data.local.dao.ArtifactDao
+import com.pocketcodeagent.data.local.dao.ChatMessageDao
+import com.pocketcodeagent.data.local.dao.FilePatchDao
 import com.pocketcodeagent.data.local.dao.LogDao
 import com.pocketcodeagent.data.local.dao.ProviderDao
+import com.pocketcodeagent.data.local.dao.SessionDao
+import com.pocketcodeagent.data.local.dao.TerminalCommandDao
+import com.pocketcodeagent.data.local.entity.ArtifactEntity
+import com.pocketcodeagent.data.local.entity.ChatMessageEntity
+import com.pocketcodeagent.data.local.entity.FilePatchEntity
 import com.pocketcodeagent.data.local.entity.LogEntity
 import com.pocketcodeagent.data.local.entity.ProviderEntity
+import com.pocketcodeagent.data.local.entity.SessionEntity
+import com.pocketcodeagent.data.local.entity.TerminalCommandEntity
 
-@Database(entities = [ProviderEntity::class, LogEntity::class], version = 2, exportSchema = false)
+@Database(
+    entities = [
+        ProviderEntity::class,
+        LogEntity::class,
+        SessionEntity::class,
+        ChatMessageEntity::class,
+        ArtifactEntity::class,
+        FilePatchEntity::class,
+        TerminalCommandEntity::class
+    ],
+    version = 3,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun providerDao(): ProviderDao
     abstract fun logDao(): LogDao
+    abstract fun sessionDao(): SessionDao
+    abstract fun chatMessageDao(): ChatMessageDao
+    abstract fun artifactDao(): ArtifactDao
+    abstract fun filePatchDao(): FilePatchDao
+    abstract fun terminalCommandDao(): TerminalCommandDao
 
     companion object {
         @Volatile

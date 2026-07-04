@@ -1,6 +1,7 @@
 package com.pocketcodeagent.ui.viewmodel
 
 import android.net.Uri
+import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -12,6 +13,7 @@ import com.pocketcodeagent.data.model.FilePatchAction
 import com.pocketcodeagent.data.model.WorkspaceFile
 import com.pocketcodeagent.data.repository.DiffLine
 import com.pocketcodeagent.data.repository.WorkspaceRepository
+import com.pocketcodeagent.domain.export.WorkspaceExporter
 import com.pocketcodeagent.domain.workspace.PatchApplyResult
 import com.pocketcodeagent.domain.workspace.UndoResult
 import com.pocketcodeagent.domain.workspace.WorkspacePatchApplier
@@ -25,11 +27,25 @@ class WorkspaceViewModel(val repository: WorkspaceRepository) : ViewModel() {
     var files by mutableStateOf<List<WorkspaceFile>>(emptyList())
     var isLoadingFiles by mutableStateOf(false)
     var isApplyingPatch by mutableStateOf(false)
+    var isCheckingConflicts by mutableStateOf(false)
+    var isExportingWorkspace by mutableStateOf(false)
+    var exportProgress by mutableStateOf<WorkspaceExporter.ExportProgress?>(null)
+    var exportStatusMessage by mutableStateOf<String?>(null)
 
     // Current open file editing
     var openFileContent by mutableStateOf("")
+    var originalFileContent by mutableStateOf("")
+    var editorContent by mutableStateOf("")
+    var openFileUri by mutableStateOf<String?>(null)
+    var openFileName by mutableStateOf<String?>(null)
+    var openFileRelativePath by mutableStateOf<String?>(null)
     var isOpenFileLoading by mutableStateOf(false)
     var isOpenFileSaving by mutableStateOf(false)
+    var openFileSizeBytes by mutableStateOf(0L)
+    val isModified: Boolean get() = editorContent != originalFileContent
+    val isLargeFile: Boolean get() = openFileSizeBytes > 200_000L
+    val isHugeFile: Boolean get() = openFileSizeBytes > 500_000L
+    val hasConflict: Boolean get() = openFileContent != originalFileContent && openFileContent.isNotEmpty()
 
     // Diff view lines
     var activeDiffLines by mutableStateOf<List<DiffLine>>(emptyList())
@@ -59,15 +75,69 @@ class WorkspaceViewModel(val repository: WorkspaceRepository) : ViewModel() {
         }
     }
 
-    fun loadFileContent(uriString: String) {
+    fun loadFileContent(uriString: String, relativePath: String? = null, fileName: String? = null) {
         viewModelScope.launch {
             isOpenFileLoading = true
+            openFileUri = uriString
+            openFileRelativePath = relativePath
+            openFileName = fileName ?: uriString.substringAfterLast("/")
             val content = withContext(Dispatchers.IO) {
                 repository.readFile(uriString)
             }
             openFileContent = content
+            originalFileContent = content
+            editorContent = content
+            openFileSizeBytes = content.encodeToByteArray().size.toLong()
             isOpenFileLoading = false
         }
+    }
+
+    fun checkForConflicts(onComplete: (Boolean) -> Unit) {
+        val uri = openFileUri
+        if (uri == null) {
+            onComplete(false)
+            return
+        }
+        viewModelScope.launch {
+            isCheckingConflicts = true
+            val diskContent = withContext(Dispatchers.IO) {
+                try {
+                    repository.readFile(uri)
+                } catch (_: Exception) {
+                    ""
+                }
+            }
+            isCheckingConflicts = false
+            if (diskContent.isNotEmpty() && diskContent != openFileContent) {
+                openFileContent = diskContent
+                onComplete(true)
+            } else {
+                onComplete(false)
+            }
+        }
+    }
+
+    fun reloadFromDisk() {
+        val uri = openFileUri ?: return
+        viewModelScope.launch {
+            isOpenFileLoading = true
+            val content = withContext(Dispatchers.IO) {
+                repository.readFile(uri)
+            }
+            openFileContent = content
+            originalFileContent = content
+            editorContent = content
+            openFileSizeBytes = content.encodeToByteArray().size.toLong()
+            isOpenFileLoading = false
+        }
+    }
+
+    fun updateEditorContent(newContent: String) {
+        editorContent = newContent
+    }
+
+    fun revertEditorContent() {
+        editorContent = originalFileContent
     }
 
     fun saveFileContent(uriString: String, content: String, onSuccess: () -> Unit = {}) {
@@ -78,6 +148,9 @@ class WorkspaceViewModel(val repository: WorkspaceRepository) : ViewModel() {
             }
             isOpenFileSaving = false
             if (success) {
+                originalFileContent = content
+                openFileContent = content
+                openFileSizeBytes = content.encodeToByteArray().size.toLong()
                 lastFileWriteTimestamp = System.currentTimeMillis()
                 onSuccess()
             }
@@ -220,6 +293,40 @@ class WorkspaceViewModel(val repository: WorkspaceRepository) : ViewModel() {
                 repository.deleteFile(fileUriString)
             }
             onComplete(success)
+        }
+    }
+
+    fun exportWorkspaceZip(context: Context, rootUriString: String, outputUriString: String) {
+        viewModelScope.launch {
+            isExportingWorkspace = true
+            exportStatusMessage = null
+            exportProgress = WorkspaceExporter.ExportProgress()
+
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(Uri.parse(outputUriString), "w")?.use { output ->
+                        WorkspaceExporter.exportToZip(
+                            context = context,
+                            rootUri = Uri.parse(rootUriString),
+                            outputStream = output,
+                            onProgress = { progress ->
+                                viewModelScope.launch { exportProgress = progress }
+                            }
+                        )
+                    } ?: listOf("Exportziel konnte nicht geoeffnet werden.")
+                }
+            }
+
+            isExportingWorkspace = false
+            result.onSuccess { warnings ->
+                exportStatusMessage = if (warnings.isNullOrEmpty()) {
+                    "Workspace ZIP exportiert."
+                } else {
+                    "Workspace ZIP exportiert, ${warnings.size} Warnung(en)."
+                }
+            }.onFailure {
+                exportStatusMessage = "ZIP Export fehlgeschlagen."
+            }
         }
     }
 }

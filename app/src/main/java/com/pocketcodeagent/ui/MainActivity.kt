@@ -14,7 +14,9 @@ import androidx.documentfile.provider.DocumentFile
 import com.pocketcodeagent.data.local.AppDatabase
 import com.pocketcodeagent.data.repository.AgentRepository
 import com.pocketcodeagent.data.repository.ProviderRepository
+import com.pocketcodeagent.data.repository.SessionRepository
 import com.pocketcodeagent.data.repository.WorkspaceRepository
+import com.pocketcodeagent.domain.security.OwnerSecurityManager
 import com.pocketcodeagent.ui.screen.*
 import com.pocketcodeagent.ui.shell.MainShellScreen
 import com.pocketcodeagent.ui.theme.DeepSlateBackground
@@ -26,22 +28,28 @@ import com.pocketcodeagent.ui.viewmodel.WorkspaceViewModel
 
 class MainActivity : ComponentActivity() {
 
+    private lateinit var ownerSecurityManager: OwnerSecurityManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // 1. Initialize local Room database
         val database = AppDatabase.getDatabase(applicationContext)
 
-        // 2. Initialize repositories
+        // 2. Initialize security manager
+        val ownerSecurityManager = OwnerSecurityManager(applicationContext)
+
+        // 3. Initialize repositories
         val providerRepo = ProviderRepository(database)
         val workspaceRepo = WorkspaceRepository(applicationContext)
         val agentRepo = AgentRepository(providerRepo, workspaceRepo)
+        val sessionRepo = SessionRepository(database)
 
-        // 3. Create view models
-        val mainViewModel = MainViewModel()
+        // 4. Create view models
+        val mainViewModel = MainViewModel(sessionRepo, ownerSecurityManager)
         val providerViewModel = ProviderViewModel(providerRepo)
         val workspaceViewModel = WorkspaceViewModel(workspaceRepo)
-        val agentViewModel = AgentViewModel(agentRepo, providerRepo)
+        val agentViewModel = AgentViewModel(agentRepo, providerRepo, sessionRepo, ownerSecurityManager)
 
         setContent {
             PocketCodeAgentTheme {
@@ -108,6 +116,13 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (::ownerSecurityManager.isInitialized) {
+            ownerSecurityManager.onActivityPaused()
         }
     }
 }
