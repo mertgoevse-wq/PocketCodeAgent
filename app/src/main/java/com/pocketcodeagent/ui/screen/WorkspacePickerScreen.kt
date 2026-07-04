@@ -18,9 +18,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pocketcodeagent.ui.theme.ElectricTeal
-import com.pocketcodeagent.ui.theme.GlowPink
-import com.pocketcodeagent.ui.theme.NeonPurple
+import com.pocketcodeagent.ui.theme.CalmSage
+import com.pocketcodeagent.ui.theme.SlateBlue
+import com.pocketcodeagent.ui.theme.WarmCopper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,7 +66,7 @@ fun WorkspacePickerScreen(
                 Icon(
                     imageVector = Icons.Default.FolderOpen,
                     contentDescription = null,
-                    tint = ElectricTeal,
+                    tint = CalmSage,
                     modifier = Modifier.size(80.dp)
                 )
 
@@ -110,7 +110,7 @@ fun WorkspacePickerScreen(
                             Text(
                                 "Currently Active Directory:",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = ElectricTeal
+                                color = CalmSage
                             )
                             Text(
                                 selectedWorkspaceName,
@@ -128,7 +128,7 @@ fun WorkspacePickerScreen(
                 // Picker Button
                 Button(
                     onClick = onPickWorkspaceClick,
-                    colors = ButtonDefaults.buttonColors(containerColor = NeonPurple),
+                    colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),
                     modifier = Modifier
                         .fillMaxWidth(0.85f)
                         .height(50.dp)
@@ -155,7 +155,7 @@ fun WorkspacePickerScreen(
                     Icon(
                         imageVector = Icons.Default.Lock,
                         contentDescription = null,
-                        tint = GlowPink,
+                        tint = WarmCopper,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -172,7 +172,7 @@ fun WorkspacePickerScreen(
                     
                     Button(
                         onClick = onProceedClick,
-                        colors = ButtonDefaults.buttonColors(containerColor = ElectricTeal),
+                        colors = ButtonDefaults.buttonColors(containerColor = CalmSage),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp)

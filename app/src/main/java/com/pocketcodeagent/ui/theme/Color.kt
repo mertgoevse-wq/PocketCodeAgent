@@ -17,12 +17,6 @@ val DarkTertiary = WarmCopper
 val TextPrimary = Color(0xFFF8F9FE)
 val TextSecondary = Color(0xFFADB5BD)
 
-// Keep legacy names mapped for backward compatibility
-val NeonPurple = SlateBlue
-val ElectricTeal = CalmSage
-val GlowPink = WarmCopper
-val GrayBorder = BorderGrey
-
 // ═══ Ivory (Claude-inspired) Palette ═════════════════════════════════════════
 val IvoryBackground = Color(0xFFF7F1E8)
 val IvorySurface = Color(0xFFFFF9F0)
